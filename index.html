@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordesk - Take Control of Your Desktop Workflow</title>
+  <meta name="description" content="Ordesk is a lightweight macOS menu bar app that lets you capture, organize, and instantly restore your entire workspace across multiple displays.">
+  <meta name="keywords" content="macOS, workspace manager, window manager, multi-display, productivity, desktop organizer, menu bar app">
+  <meta name="author" content="Fawaz Faiz">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Ordesk - Take Control of Your Desktop Workflow">
+  <meta property="og:description" content="Capture, organize, and instantly restore your entire macOS workspace across multiple displays.">
+  <meta property="og:image" content="assets/images/hero-banner.png">
+  <meta property="og:url" content="https://ordeskapp.com">
+  <meta property="og:type" content="website">
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ordesk - Take Control of Your Desktop Workflow">
+  <meta name="twitter:description" content="Capture, organize, and instantly restore your entire macOS workspace across multiple displays.">
+  <meta name="twitter:image" content="assets/images/hero-banner.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/icons/app-icon-64.png">
+  <link rel="apple-touch-icon" href="assets/icons/app-icon.png">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+
+  <!-- ===== Navigation ===== -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="#" class="nav-brand">
+        <img src="assets/icons/app-icon-64.png" alt="Ordesk" width="36" height="36">
+        Ordesk
+      </a>
+
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How It Works</a></li>
+        <li><a href="#showcase">Screenshots</a></li>
+        <li><a href="#about">About</a></li>
+      </ul>
+
+      <div class="nav-actions">
+        <button class="theme-toggle" aria-label="Toggle theme">
+          <!-- Sun icon (shown in dark mode) -->
+          <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+        </button>
+        <a href="https://example.com/download" class="nav-download-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </a>
+      </div>
+
+      <button class="mobile-menu-btn" aria-label="Toggle menu" aria-expanded="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ===== Hero Section ===== -->
+  <section class="hero" id="hero">
+    <div class="hero-bg-gradient"></div>
+
+    <div style="width:100%">
+      <div class="hero-content">
+        <div class="hero-badge fade-in">
+          <span class="dot"></span>
+          Free during beta
+        </div>
+
+        <h1 class="fade-in fade-in-delay-1">
+          Take Control of Your<br>
+          <span class="gradient-text">Desktop Workflow</span>
+        </h1>
+
+        <p class="hero-subtitle fade-in fade-in-delay-2">
+          Ordesk is a lightweight macOS menu bar app that lets you capture, organize,
+          and instantly restore your entire workspace — across multiple displays.
+        </p>
+
+        <div class="hero-buttons fade-in fade-in-delay-3">
+          <a href="https://example.com/download" class="btn btn-primary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download for macOS
+          </a>
+          <a href="#features" class="btn btn-secondary">
+            Learn More
+          </a>
+        </div>
+
+        <div class="hero-meta fade-in fade-in-delay-4">
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>
+            macOS 13+
+          </span>
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Notarized by Apple
+          </span>
+          <span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Up to 6 Displays
+          </span>
+        </div>
+      </div>
+
+      <!-- Hero Image -->
+      <div class="hero-image fade-in fade-in-delay-4">
+        <div class="hero-image-wrapper">
+          <img src="assets/images/hero-banner.png" alt="Ordesk workspace manager running on a dual monitor setup" loading="eager">
+        </div>
+        <div class="hero-image-glow"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== About Section ===== -->
+  <section class="section" id="about">
+    <div class="container">
+      <div class="about-grid">
+        <div class="about-text fade-in">
+          <span class="section-label">About Ordesk</span>
+          <h3>Eliminate the Friction of Switching Between Tasks</h3>
+          <p>
+            Ordesk is designed for professionals who juggle multiple projects throughout the day.
+            Instead of manually reopening apps and repositioning windows every time you switch contexts,
+            Ordesk saves your exact setup and restores it instantly.
+          </p>
+          <ul class="about-list">
+            <li>
+              <span class="check-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              Capture your current desktop — open apps and window positions across all displays
+            </li>
+            <li>
+              <span class="check-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              Save setups as reusable workspaces you can launch anytime
+            </li>
+            <li>
+              <span class="check-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              Restore everything with a single click or keyboard shortcut
+            </li>
+            <li>
+              <span class="check-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              Minimize or close non-essential apps automatically for a clean desk
+            </li>
+          </ul>
+        </div>
+        <div class="about-image fade-in fade-in-delay-2">
+          <img src="assets/images/hero-mockup.png" alt="Ordesk running on a multi-monitor Mac setup" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Features Section ===== -->
+  <section class="section section-alt" id="features">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          Features
+        </span>
+        <h2>Everything You Need to Stay Organized</h2>
+        <p>Powerful workspace management that stays out of your way until you need it.</p>
+      </div>
+
+      <div class="features-grid">
+        <!-- Feature 1 -->
+        <div class="feature-card fade-in fade-in-delay-1">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          </div>
+          <h3>Menu Bar Simplicity</h3>
+          <p>Lightweight and always accessible from your macOS menu bar. No dock clutter.</p>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="feature-card fade-in fade-in-delay-2">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3>Multi-Display Support</h3>
+          <p>Automatically detects and supports up to 6 displays for complex setups.</p>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="feature-card fade-in fade-in-delay-3">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="9" height="9" rx="1"/><rect x="13" y="2" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>
+          </div>
+          <h3>Smart Window Layouts</h3>
+          <p>Arrange 1 to 4 windows per display with intelligent auto-positioning.</p>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="feature-card fade-in fade-in-delay-4">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          </div>
+          <h3>Workspace Saving</h3>
+          <p>Save setups without launching them. Build your library of workspaces.</p>
+        </div>
+
+        <!-- Feature 5 -->
+        <div class="feature-card fade-in fade-in-delay-5">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          </div>
+          <h3>Instant Switching</h3>
+          <p>Launch entire workspaces with one click. Switch between projects in seconds.</p>
+        </div>
+
+        <!-- Feature 6 -->
+        <div class="feature-card fade-in fade-in-delay-6">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </div>
+          <h3>Clean Desktop Instantly</h3>
+          <p>Close or minimize all non-essential windows with a single action.</p>
+        </div>
+
+        <!-- Feature 7 -->
+        <div class="feature-card fade-in fade-in-delay-7">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.001"/><path d="M10 8h.001"/><path d="M14 8h.001"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="6" y1="16" x2="14" y2="16"/></svg>
+          </div>
+          <h3>Keyboard Shortcut</h3>
+          <p>Launch instantly with a global hotkey.</p>
+          <div class="kbd-shortcut">
+            <span class="kbd">&#x2303; Ctrl</span>
+            <span class="kbd-plus">+</span>
+            <span class="kbd">&#x2325; Option</span>
+            <span class="kbd-plus">+</span>
+            <span class="kbd">O</span>
+          </div>
+        </div>
+
+        <!-- Feature 8 -->
+        <div class="feature-card fade-in fade-in-delay-8">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <h3>Launch at Login</h3>
+          <p>Always ready when your Mac starts. Set it once and forget it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== How It Works ===== -->
+  <section class="section" id="how-it-works">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          How It Works
+        </span>
+        <h2>Three Steps to an Organized Desktop</h2>
+        <p>Get started in under a minute. No configuration needed.</p>
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card fade-in fade-in-delay-1">
+          <div class="step-number">1</div>
+          <h3>Set Up Your Apps</h3>
+          <p>Open the apps you need and arrange your windows across your displays.</p>
+        </div>
+
+        <div class="step-card fade-in fade-in-delay-2">
+          <div class="step-number">2</div>
+          <h3>Save Your Workspace</h3>
+          <p>Click "Save Current" in Ordesk to capture your entire setup instantly.</p>
+        </div>
+
+        <div class="step-card fade-in fade-in-delay-3">
+          <div class="step-number">3</div>
+          <h3>Restore Anytime</h3>
+          <p>Switch between saved workspaces with a single click or keyboard shortcut.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Screenshots / Showcase ===== -->
+  <section class="section section-alt" id="showcase">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          App Preview
+        </span>
+        <h2>See Ordesk in Action</h2>
+        <p>A look at how Ordesk helps you manage workspaces effortlessly.</p>
+      </div>
+
+      <!-- Full-width showcase image -->
+      <div class="showcase-grid">
+        <div class="showcase-item showcase-full fade-in">
+          <img src="assets/images/features-showcase.png" alt="Ordesk feature overview - Manage, Save, and Create workspaces" loading="lazy">
+        </div>
+        <div class="showcase-item fade-in fade-in-delay-1">
+          <img src="assets/images/screenshot-desktop.png" alt="Ordesk popover with workspace list on desktop" loading="lazy">
+        </div>
+        <div class="showcase-item fade-in fade-in-delay-2">
+          <img src="assets/images/screenshot-save.png" alt="Save Current Workspace dialog showing running apps" loading="lazy">
+        </div>
+        <div class="showcase-item fade-in fade-in-delay-3">
+          <img src="assets/images/screenshot-editor.png" alt="Workspace editor with dual display support" loading="lazy">
+        </div>
+        <div class="showcase-item fade-in fade-in-delay-4">
+          <img src="assets/images/screenshot-settings.png" alt="Ordesk settings panel" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Target Users ===== -->
+  <section class="section" id="users">
+    <div class="container">
+      <div class="section-header fade-in">
+        <span class="section-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Built For
+        </span>
+        <h2>Who Is Ordesk For?</h2>
+        <p>Whether you use one display or six, Ordesk adapts to how you work.</p>
+      </div>
+
+      <div class="users-grid">
+        <div class="user-card fade-in fade-in-delay-1">
+          <div class="user-icon">&#128187;</div>
+          <h3>Developers</h3>
+          <p>Manage IDEs, terminals, browsers, and documentation across multiple monitors without losing context.</p>
+        </div>
+
+        <div class="user-card fade-in fade-in-delay-2">
+          <div class="user-icon">&#127912;</div>
+          <h3>Designers & Creatives</h3>
+          <p>Switch between design tools, preview screens, and reference boards instantly.</p>
+        </div>
+
+        <div class="user-card fade-in fade-in-delay-3">
+          <div class="user-icon">&#128188;</div>
+          <h3>Professionals & Freelancers</h3>
+          <p>Separate client projects with dedicated workspaces. Jump between contexts without the setup time.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CTA Section ===== -->
+  <section class="cta-section section-alt" id="download">
+    <div class="container">
+      <div class="cta-content fade-in">
+        <h2>Ready to Organize Your Desktop?</h2>
+        <p>Download Ordesk for free and start saving workspaces today. Available for macOS 13 and later.</p>
+        <div class="cta-buttons">
+          <a href="https://example.com/download" class="btn btn-primary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download for macOS
+          </a>
+        </div>
+        <div class="kbd-shortcut" style="justify-content:center; margin-top:24px;">
+          <span style="font-size:13px; color:var(--text-muted); margin-right:8px;">Quick launch:</span>
+          <span class="kbd">&#x2303; Ctrl</span>
+          <span class="kbd-plus">+</span>
+          <span class="kbd">&#x2325; Option</span>
+          <span class="kbd-plus">+</span>
+          <span class="kbd">O</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div>
+          <div class="footer-brand">
+            <img src="assets/icons/app-icon-64.png" alt="Ordesk" width="32" height="32">
+            <span>Ordesk</span>
+          </div>
+          <p class="footer-desc">
+            A lightweight macOS menu bar app that lets you capture, organize, and instantly restore
+            your entire workspace across multiple displays.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#showcase">Screenshots</a></li>
+            <li><a href="#download">Download</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Developer</h4>
+          <ul>
+            <li><a href="mailto:fawasofc@gmail.com">fawasofc@gmail.com</a></li>
+            <li><a href="https://github.com/fawasofc-ux" target="_blank" rel="noopener">GitHub</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>&copy; 2026 Ordesk. Built by Fawaz Faiz.</span>
+        <div class="footer-social">
+          <a href="https://github.com/fawasofc-ux" target="_blank" rel="noopener" aria-label="GitHub">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          </a>
+          <a href="mailto:fawasofc@gmail.com" aria-label="Email">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="scripts/main.js"></script>
+</body>
+</html>
