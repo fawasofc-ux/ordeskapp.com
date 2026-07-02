@@ -1,0 +1,4 @@
+node_modules/
+# Plaintext workbook seed — never commit; only the encrypted
+# seed.enc.json ships. Regenerate with: node encrypt-seed.mjs <password>
+src/seed.js
