@@ -37,6 +37,7 @@ export default function App() {
   const dist = E.partnerDistribution(data);
   const cats = E.expensesByCategory(data, scope);
   const recv = E.receivablesSplit(data, scope);
+  const stock = E.stockByTrip(data);
   const paperLoss = E.openTripPaperLoss(data);
   const scopeLabel = scope ? data.trips.find((t) => t.id === scope)?.name : 'All trips';
   const scopedPaperLoss = scope ? (E.isPaperLoss(data, scope) ? pnlScoped.netProfit : 0) : paperLoss;
@@ -91,7 +92,12 @@ export default function App() {
         />
         <KpiCard label="Outstanding Receivables" value={liq.receivables} accent="amber" caption="pending collections" />
         <KpiCard label={`Capital Owed to ${data.settings.partners[0] || 'Owner'}`} value={owed} accent="violet" caption="payback obligation" />
-        <KpiCard label="Inventory on Hand" value={liq.inventory} accent="cyan" caption="manual estimate — unsold stock" />
+        <KpiCard
+          label="Inventory on Hand"
+          value={liq.inventory}
+          accent="cyan"
+          caption={`manual estimate · ${fmt(stock.totals.remaining)} pcs in stock`}
+        />
       </section>
 
       <section className="grid">
@@ -161,6 +167,47 @@ export default function App() {
         <div className="panel span12">
           <h3>Partner Profit Distribution — closed trips only</h3>
           <PartnerTable dist={dist} />
+        </div>
+
+        <div className="panel span12">
+          <h3>Gem Stock — pieces bought vs sold (by quantity)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Trip</th>
+                <th className="num">Pieces Bought</th>
+                <th className="num">Pieces Sold</th>
+                <th className="num">Remaining</th>
+                <th className="num">Avg Cost / Pc</th>
+                <th className="num">Remaining Value (est.)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stock.rows.map((r) => (
+                <tr key={r.trip.id}>
+                  <td>{r.trip.name} <span className="subtle">{r.trip.status === 'Open' ? '● open' : '✓ closed'}</span></td>
+                  <td className="num">{fmt(r.bought)}</td>
+                  <td className="num amb">{fmt(r.sold)}</td>
+                  <td className={`num ${r.remaining > 0 ? 'cy' : ''}`}>{fmt(r.remaining)}</td>
+                  <td className="num">{r.avgCost ? fmt(r.avgCost) : <span className="subtle">—</span>}</td>
+                  <td className="num">{r.avgCost ? fmt(r.remainingValue) : <span className="subtle">—</span>}</td>
+                </tr>
+              ))}
+              <tr className="total-row">
+                <td>Combined</td>
+                <td className="num">{fmt(stock.totals.bought)}</td>
+                <td className="num">{fmt(stock.totals.sold)}</td>
+                <td className="num">{fmt(stock.totals.remaining)}</td>
+                <td className="num"></td>
+                <td className="num">{fmt(stock.totals.remainingValue)}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="subtle" style={{ marginTop: 10 }}>
+            Lots are bought at a total price (no per-piece cost), so stock is tracked by <b>quantity</b>: pieces
+            in from Purchases minus pieces out from Sales (the Qty column). Avg cost / remaining value are
+            informational estimates (lot cost ÷ pieces) — the P&L above stays lot-based and is unaffected.
+          </div>
         </div>
       </section>
 

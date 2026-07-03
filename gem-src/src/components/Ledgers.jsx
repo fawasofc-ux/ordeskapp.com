@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
+import { saleNet } from '../engine.js';
 
 // Schema-driven ledgers: one table + one form implementation for all five.
 function schemas(data) {
@@ -15,19 +16,23 @@ function schemas(data) {
         { key: 'customer', label: 'Customer', type: 'text' },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'Received', label: 'Received' }, { value: 'Pending', label: 'Pending' }] },
-        { key: 'amount', label: 'Amount (LKR)', type: 'number' },
+        { key: 'commissionPct', label: 'Commission %', type: 'number', noTotal: true, hint: '% deducted from the sale (0 for already-net entries)' },
+        { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — draws down trip stock' },
+        { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'gross sale before commission' },
       ],
-      defaults: { status: 'Pending' },
+      // Net is always derived from amount and commission %, never stored.
+      computed: [{ key: 'net', label: 'Net (LKR)', accent: 'pos', compute: saleNet }],
+      defaults: { status: 'Pending', commissionPct: 0, qty: 1 },
     },
     purchases: {
       label: 'Purchases',
       fields: [
         { key: 'date', label: 'Date', type: 'date' },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
-        { key: 'pieces', label: 'Pieces', type: 'number' },
+        { key: 'pieces', label: 'Qty (pieces)', type: 'number', hint: 'pieces in the lot — adds to trip stock' },
         { key: 'fundingSource', label: 'Funding source', type: 'text' },
         { key: 'description', label: 'Description', type: 'text', full: true },
-        { key: 'amount', label: 'Amount (LKR)', type: 'number' },
+        { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'total lot cost (no per-piece price)' },
       ],
     },
     expenses: {
@@ -128,9 +133,17 @@ function RowForm({ schema, initial, onSave, onCancel }) {
                 required={f.key === 'amount' || f.key === 'name'}
               />
             )}
+            {f.hint && <div className="subtle" style={{ marginTop: 4, fontSize: 10 }}>{f.hint}</div>}
           </div>
         ))}
       </div>
+      {schema.computed?.some((c) => c.key === 'net') && (
+        <div className="subtle" style={{ marginTop: 12, fontFamily: 'var(--mono)' }}>
+          Net after commission ={' '}
+          <span className="pos">{fmt(saleNet({ amount: form.amount, commissionPct: form.commissionPct }))}</span>
+          {Number(form.commissionPct) > 0 && ` (−${fmt((Number(form.amount) || 0) * (Number(form.commissionPct) || 0) / 100)} commission)`}
+        </div>
+      )}
       <div className="modal-actions">
         <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
         <button type="submit" className="btn">Save</button>
@@ -158,16 +171,15 @@ export default function Ledgers({ data, tripFilter }) {
       const q = search.toLowerCase();
       out = out.filter((r) => JSON.stringify(r).toLowerCase().includes(q));
     }
+    const sortCol = (allSchemas[tab].computed || []).find((c) => c.key === sort.key);
     out.sort((a, b) => {
-      const va = a[sort.key] ?? '';
-      const vb = b[sort.key] ?? '';
+      const va = sortCol ? sortCol.compute(a) : (a[sort.key] ?? '');
+      const vb = sortCol ? sortCol.compute(b) : (b[sort.key] ?? '');
       if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sort.dir;
       return String(va).localeCompare(String(vb)) * sort.dir;
     });
     return out;
   }, [data, tab, tripFilter, statusFilter, search, sort]);
-
-  const total = rows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
 
   function onDelete(row) {
     if (tab === 'trips') {
@@ -192,7 +204,13 @@ export default function Ledgers({ data, tripFilter }) {
     );
   }
 
-  const cols = schema.fields;
+  const computedCols = schema.computed || [];
+  const cols = [...schema.fields, ...computedCols];
+  // Columns whose values sum meaningfully in the TOTAL row.
+  const totalCols = cols.filter((c) => (c.type === 'number' || c.compute) && !c.noTotal);
+  const colTotal = (c) => rows.reduce((t, r) => t + (c.compute ? c.compute(r) : Number(r[c.key]) || 0), 0);
+  const firstTotalIdx = cols.findIndex((c) => totalCols.includes(c));
+
   return (
     <div className="panel span12">
       <div className="tabs">
@@ -221,24 +239,33 @@ export default function Ledgers({ data, tripFilter }) {
         <table>
           <thead>
             <tr>
-              {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number'))}
+              {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number' || !!f.compute))}
               <th style={{ width: 110 }}></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                {cols.map((f) => (
-                  <td key={f.key} className={f.type === 'number' ? 'num' : ''}>
-                    {f.key === 'tripId' ? tripName(r.tripId)
-                      : f.key === 'status' && tab === 'sales' ? (
-                        <span className={`badge ${r.status === 'Received' ? 'ok' : 'warn'}`}>{r.status}</span>
-                      ) : f.key === 'status' ? (
-                        <span className={`badge ${r.status === 'Open' ? 'info' : 'ok'}`}>{r.status}</span>
-                      ) : f.type === 'number' && r[f.key] != null && r[f.key] !== '' ? fmt(r[f.key])
-                      : (r[f.key] ?? '') || <span className="subtle">—</span>}
-                  </td>
-                ))}
+                {cols.map((f) => {
+                  const numeric = f.type === 'number' || !!f.compute;
+                  let content;
+                  if (f.compute) {
+                    content = <span className={f.accent || ''}>{fmt(f.compute(r))}</span>;
+                  } else if (f.key === 'tripId') {
+                    content = tripName(r.tripId);
+                  } else if (f.key === 'status' && tab === 'sales') {
+                    content = <span className={`badge ${r.status === 'Received' ? 'ok' : 'warn'}`}>{r.status}</span>;
+                  } else if (f.key === 'status') {
+                    content = <span className={`badge ${r.status === 'Open' ? 'info' : 'ok'}`}>{r.status}</span>;
+                  } else if (f.key === 'commissionPct') {
+                    content = r.commissionPct ? `${fmt(r.commissionPct)}%` : <span className="subtle">0%</span>;
+                  } else if (f.type === 'number' && r[f.key] != null && r[f.key] !== '') {
+                    content = fmt(r[f.key]);
+                  } else {
+                    content = (r[f.key] ?? '') || <span className="subtle">—</span>;
+                  }
+                  return <td key={f.key} className={numeric ? 'num' : ''}>{content}</td>;
+                })}
                 <td>
                   <div className="row-actions">
                     <button className="btn ghost icon" onClick={() => setEditing({ row: r })}>Edit</button>
@@ -252,8 +279,12 @@ export default function Ledgers({ data, tripFilter }) {
             )}
             {tab !== 'trips' && rows.length > 0 && (
               <tr className="total-row">
-                <td colSpan={cols.length - 1}>TOTAL ({rows.length} entries)</td>
-                <td className="num">{fmt(total)}</td>
+                <td colSpan={Math.max(1, firstTotalIdx)}>TOTAL ({rows.length} entries)</td>
+                {cols.slice(Math.max(1, firstTotalIdx)).map((c) => (
+                  <td key={c.key} className={c.type === 'number' || c.compute ? 'num' : ''}>
+                    {totalCols.includes(c) ? fmt(colTotal(c)) : ''}
+                  </td>
+                ))}
                 <td></td>
               </tr>
             )}

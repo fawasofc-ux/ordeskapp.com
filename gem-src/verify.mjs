@@ -56,6 +56,17 @@ for (const p of dist.partners) {
   check(`${p.name} remaining owed`, p.remaining, expect[p.name].remaining);
 }
 
+console.log('— Stock (quantity) & commission —');
+const stock = E.stockByTrip(d);
+const s2 = stock.rows.find((r) => r.trip.id === 'trip2');
+check('Trip 2 pieces bought', s2.bought, 94);
+check('Trip 2 pieces sold (no qty on seed sales)', s2.sold, 0);
+check('Trip 2 pieces remaining', s2.remaining, 94);
+check('Combined pieces bought', stock.totals.bought, 94);
+// Commission defaults to 0 on all seed sales → net === gross amount.
+check('Seed sale net = amount when no commission', E.saleNet({ amount: 100000 }), 100000);
+check('Sale net applies commission %', E.saleNet({ amount: 100000, commissionPct: 10 }), 90000);
+
 console.log('— Expense categories —');
 const cats = Object.fromEntries(E.expensesByCategory(d).map((c) => [c.category, c.amount]));
 const expectCats = { Processing: 90000, Export: 98000, Vehicle: 8500, Testing: 2500, Commission: 2000, Equipment: 24500, Travel: 521950, Inventory: 151000, Misc: 3000 };

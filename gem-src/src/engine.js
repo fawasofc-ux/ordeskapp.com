@@ -5,9 +5,16 @@ const sum = (rows) => rows.reduce((t, r) => t + (Number(r.amount) || 0), 0);
 
 const byTrip = (rows, tripId) => (tripId ? rows.filter((r) => r.tripId === tripId) : rows);
 
-// Gross Sales, COGS, Expenses, Net Profit — per trip (tripId) or combined (null).
+// A sale's net revenue = amount (gross) less commission%. Existing entries carry
+// no commissionPct, so it defaults to 0 → net === amount → no change to any total.
+export const saleCommission = (s) => (Number(s.amount) || 0) * ((Number(s.commissionPct) || 0) / 100);
+export const saleNet = (s) => (Number(s.amount) || 0) - saleCommission(s);
+
+const sumNet = (rows) => rows.reduce((t, s) => t + saleNet(s), 0);
+
+// Sales (net of commission), COGS, Expenses, Net Profit — per trip (tripId) or combined (null).
 export function pnl(data, tripId = null) {
-  const grossSales = sum(byTrip(data.sales, tripId));
+  const grossSales = sumNet(byTrip(data.sales, tripId));
   const cogs = sum(byTrip(data.purchases, tripId));
   const expenses = sum(byTrip(data.expenses, tripId));
   return { grossSales, cogs, expenses, netProfit: grossSales - cogs - expenses };
@@ -21,7 +28,7 @@ export function pnlByTrip(data) {
 // Cash In = capital + received sales; Cash Out = purchases + expenses + draws.
 export function cashReconciliation(data) {
   const capitalIn = sum(data.capital);
-  const salesReceived = sum(data.sales.filter((s) => s.status === 'Received'));
+  const salesReceived = sumNet(data.sales.filter((s) => s.status === 'Received'));
   const cashIn = capitalIn + salesReceived;
   const purchasesOut = sum(data.purchases);
   const expensesOut = sum(data.expenses);
@@ -38,7 +45,7 @@ export function cashReconciliation(data) {
 }
 
 export function liquidity(data) {
-  const receivables = sum(data.sales.filter((s) => s.status === 'Pending'));
+  const receivables = sumNet(data.sales.filter((s) => s.status === 'Pending'));
   const inventory = Number(data.settings.inventoryEstimate) || 0;
   const actualBank = Number(data.settings.actualBank) || 0;
   return { receivables, inventory, actualBank, businessValue: actualBank + receivables + inventory };
@@ -74,9 +81,35 @@ export function expensesByCategory(data, tripId = null) {
 export function receivablesSplit(data, tripId = null) {
   const rows = byTrip(data.sales, tripId);
   return {
-    received: sum(rows.filter((s) => s.status === 'Received')),
-    pending: sum(rows.filter((s) => s.status === 'Pending')),
+    received: sumNet(rows.filter((s) => s.status === 'Received')),
+    pending: sumNet(rows.filter((s) => s.status === 'Pending')),
   };
+}
+
+// Quantity accounting for gem stock. Purchases arrive as a lot (a total cost for
+// N pieces — no per-piece price), so we count pieces in vs pieces out and value
+// the remainder at the lot's average cost. Money-side P&L stays lot-based and
+// unchanged; this average cost is an informational estimate only.
+export function stockByTrip(data) {
+  const rows = data.trips.map((t) => {
+    const purchases = data.purchases.filter((p) => p.tripId === t.id);
+    const bought = purchases.reduce((s, p) => s + (Number(p.pieces) || 0), 0);
+    const lotCost = purchases.reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    const sold = data.sales.filter((s) => s.tripId === t.id).reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    const remaining = bought - sold;
+    const avgCost = bought > 0 ? lotCost / bought : 0;
+    return { trip: t, bought, sold, remaining, avgCost, remainingValue: avgCost * remaining };
+  });
+  const totals = rows.reduce(
+    (a, r) => ({
+      bought: a.bought + r.bought,
+      sold: a.sold + r.sold,
+      remaining: a.remaining + r.remaining,
+      remainingValue: a.remainingValue + r.remainingValue,
+    }),
+    { bought: 0, sold: 0, remaining: 0, remainingValue: 0 },
+  );
+  return { rows, totals };
 }
 
 // True when a trip's loss is likely just unsold inventory (open trip, COGS > sales).
