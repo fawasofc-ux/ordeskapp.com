@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { subscribe, getState, initStore } from './store.js';
+import { subscribe, getState, initStore, connectCloudSync } from './store.js';
+import { subscribeSync, getSyncStatus, getSyncDetail, flush } from './sync.js';
 import { isAuthed, logout, loadSeed } from './auth.js';
 import * as E from './engine.js';
 import { fmt, fmtFull } from './format.js';
@@ -10,10 +11,62 @@ import SettingsPanel from './components/SettingsPanel.jsx';
 import Ledgers from './components/Ledgers.jsx';
 import { PnlChart, ExpenseDonut, ReceivablesBar, CashFlowChart } from './components/Charts.jsx';
 
+// Poll the deployed version.json; when a newer build goes live, reload once
+// automatically (guarded against loops) or surface a refresh badge.
+function useUpdateCheck() {
+  const [updateReady, setUpdateReady] = useState(false);
+  useEffect(() => {
+    let stop = false;
+    async function check() {
+      try {
+        const res = await fetch(`${import.meta.env.BASE_URL}version.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const { build } = await res.json();
+        if (stop || !build || build === __BUILD_ID__) return;
+        const guard = `gem-reloaded-${build}`;
+        if (!sessionStorage.getItem(guard)) {
+          sessionStorage.setItem(guard, '1');
+          window.location.reload();
+        } else {
+          setUpdateReady(true);
+        }
+      } catch {
+        /* offline — ignore */
+      }
+    }
+    check();
+    const t = setInterval(check, 60000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
+  return updateReady;
+}
+
+const SYNC_LABELS = {
+  boot: ['amb', '● connecting…'],
+  nokey: ['amb', '● local only — connect cloud'],
+  syncing: ['amb', '● syncing…'],
+  synced: ['pos', '● cloud synced'],
+  offline: ['neg', '● offline — saved locally'],
+  error: ['neg', '● sync error — saved locally'],
+};
+
+async function promptConnectCloud() {
+  const token = window.prompt(
+    'Connect cloud sync (one time on this device):\n\n' +
+      'Paste a GitHub token with read/write Contents access to the private ' +
+      'fawasofc-ux/gem-data repo (a fine-grained PAT scoped to only that repo is best).',
+  );
+  if (!token || !token.trim()) return;
+  const res = await connectCloudSync(token);
+  if (!res.ok) window.alert(`Could not connect: ${res.error}`);
+}
+
 export default function App() {
   const [authed, setAuthed] = useState(isAuthed());
   const data = useSyncExternalStore(subscribe, getState);
+  const syncStatus = useSyncExternalStore(subscribeSync, getSyncStatus);
   const [tripFilter, setTripFilter] = useState(''); // '' = combined
+  const updateReady = useUpdateCheck();
 
   // After unlock (or reload with a live session), decrypt the seed and boot the store.
   useEffect(() => {
@@ -65,8 +118,25 @@ export default function App() {
           ))}
         </div>
         <div className="spacer" />
+        {updateReady && (
+          <button className="btn icon" onClick={() => window.location.reload()} title="A newer version of the dashboard is deployed">
+            ⟳ update ready
+          </button>
+        )}
+        <span
+          className={SYNC_LABELS[syncStatus]?.[0] || 'subtle'}
+          style={{ fontFamily: 'var(--mono)', fontSize: 11, cursor: syncStatus === 'nokey' ? 'pointer' : 'default' }}
+          onClick={syncStatus === 'nokey' ? promptConnectCloud : undefined}
+          title={
+            syncStatus === 'nokey'
+              ? 'Click to connect this device to the cloud database (paste token once)'
+              : getSyncDetail() || 'Every change is encrypted and saved to your private gem-data repo'
+          }
+        >
+          {SYNC_LABELS[syncStatus]?.[1] || syncStatus}
+        </span>
         <span className="subtle">LKR · live from ledgers</span>
-        <button className="btn ghost icon" onClick={() => { logout(); setAuthed(false); }}>Lock</button>
+        <button className="btn ghost icon" onClick={() => { flush(); logout(); setAuthed(false); }}>Lock</button>
       </header>
 
       <section className="kpis">
@@ -214,8 +284,8 @@ export default function App() {
       <Ledgers data={data} tripFilter={tripFilter} />
 
       <div className="footer-note">
-        Data lives in this browser (localStorage) — export/backup before clearing browser data.
-        Seeded from Gem_Business_Accounts.xlsx · all totals computed live.
+        Cloud database: every change is encrypted in this browser and committed to the private
+        gem-data repo (full history kept) · localStorage is the offline cache · all totals computed live.
       </div>
     </div>
   );

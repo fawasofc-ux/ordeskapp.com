@@ -1,14 +1,19 @@
 // Access gate + data encryption for a static page.
 // The seed ledger data ships only as AES-256-GCM ciphertext (seed.enc.json);
-// the decryption key is derived from the admin password with PBKDF2, so the
-// public bundle never contains the plaintext financial figures. Credentials
-// are additionally checked as a SHA-256 hash of "username:password".
+// the key is derived from the admin password with PBKDF2, so the public
+// bundle never contains the plaintext financial figures. Login is
+// additionally checked as a SHA-256 hash of "username:password". The same
+// derived key encrypts every document written to the cloud data repo
+// (sync.js) — data at rest there is ciphertext too.
 
 import encSeed from './seed.enc.json';
 
 const CRED_HASH = 'b535618fb474a44e08f0a958dbf2c5646a70e4144e652ef2e6b60473d763715e';
 const SESSION_KEY = 'gem-auth-v1';
 const DATA_KEY = 'gem-datakey-v1';
+
+// PBKDF2 work factor — must match encrypt-secrets.mjs.
+const KDF_ITERATIONS = 600000;
 
 const enc = new TextEncoder();
 const b64ToBytes = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -22,16 +27,16 @@ async function sha256(text) {
 async function deriveKey(password) {
   const material = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: b64ToBytes(encSeed.salt), iterations: 210000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: b64ToBytes(encSeed.salt), iterations: KDF_ITERATIONS, hash: 'SHA-256' },
     material,
     { name: 'AES-GCM', length: 256 },
     true,
-    ['decrypt'],
+    ['encrypt', 'decrypt'],
   );
 }
 
-async function decryptSeed(key) {
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(encSeed.iv) }, key, b64ToBytes(encSeed.data));
+async function decryptJson(key, { iv, data }) {
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(iv) }, key, b64ToBytes(data));
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
@@ -40,7 +45,7 @@ export async function login(username, password) {
   if (hash !== CRED_HASH) return false;
   try {
     const key = await deriveKey(password);
-    await decryptSeed(key); // proves the key is right before storing it
+    await decryptJson(key, encSeed); // proves the key is right before storing it
     sessionStorage.setItem(SESSION_KEY, hash);
     sessionStorage.setItem(DATA_KEY, bytesToB64(await crypto.subtle.exportKey('raw', key)));
     return true;
@@ -49,13 +54,24 @@ export async function login(username, password) {
   }
 }
 
-// Decrypt the seed using the session's stored key (after login / on reload).
-export async function loadSeed() {
+// The session's AES key (after login / on reload) — used for the seed and
+// for encrypting/decrypting cloud documents.
+export async function getDataKey() {
   const raw = sessionStorage.getItem(DATA_KEY);
   if (!raw) return null;
   try {
-    const key = await crypto.subtle.importKey('raw', b64ToBytes(raw), 'AES-GCM', false, ['decrypt']);
-    return await decryptSeed(key);
+    return await crypto.subtle.importKey('raw', b64ToBytes(raw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  } catch {
+    return null;
+  }
+}
+
+// Decrypt the seed using the session's stored key (after login / on reload).
+export async function loadSeed() {
+  const key = await getDataKey();
+  if (!key) return null;
+  try {
+    return await decryptJson(key, encSeed);
   } catch {
     return null;
   }

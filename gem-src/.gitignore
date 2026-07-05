@@ -2,3 +2,6 @@ node_modules/
 # Plaintext workbook seed — never commit; only the encrypted
 # seed.enc.json ships. Regenerate with: node encrypt-seed.mjs <password>
 src/seed.js
+clouddoc.json
+# Never ship credentials — sync token is pasted per-device, never committed
+src/token.enc.json
