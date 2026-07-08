@@ -147,8 +147,8 @@ function initAmbientBackground() {
   function palette() {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     return dark
-      ? { rgb: '96, 165, 250', nodeA: 0.55, lineA: 0.16, orbs: ['rgba(37,99,235,0.20)', 'rgba(59,130,246,0.14)', 'rgba(99,102,241,0.12)'] }
-      : { rgb: '37, 99, 235', nodeA: 0.40, lineA: 0.10, orbs: ['rgba(37,99,235,0.10)', 'rgba(59,130,246,0.08)', 'rgba(14,165,233,0.06)'] };
+      ? { rgb: '116, 175, 255', nodeA: 0.85, lineA: 0.30, glowA: 0.28, orbs: ['rgba(37,99,235,0.26)', 'rgba(59,130,246,0.18)', 'rgba(99,102,241,0.16)'] }
+      : { rgb: '37, 99, 235', nodeA: 0.65, lineA: 0.20, glowA: 0.16, orbs: ['rgba(37,99,235,0.14)', 'rgba(59,130,246,0.11)', 'rgba(14,165,233,0.09)'] };
   }
   let colors = palette();
 
@@ -164,17 +164,20 @@ function initAmbientBackground() {
 
   function build() {
     // Node count scales with viewport area, capped for performance.
-    const target = Math.round((width * height) / 26000);
-    const count = Math.max(14, Math.min(52, target));
+    const target = Math.round((width * height) / 20000);
+    const count = Math.max(20, Math.min(70, target));
     nodes = [];
     for (let i = 0; i < count; i++) {
       nodes.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.28,
-        vy: (Math.random() - 0.5) * 0.28,
-        r: Math.random() * 1.6 + 1.1,
-        depth: Math.random() * 0.6 + 0.4 // for parallax strength
+        vx: (Math.random() - 0.5) * 0.32,
+        vy: (Math.random() - 0.5) * 0.32,
+        r: Math.random() * 2.6 + 1.8,
+        depth: Math.random() * 0.6 + 0.4, // for parallax strength
+        // Gentle twinkle so particles catch the eye
+        phase: Math.random() * Math.PI * 2,
+        twinkle: Math.random() * 0.012 + 0.006
       });
     }
 
@@ -185,7 +188,7 @@ function initAmbientBackground() {
     ];
   }
 
-  const LINK_DIST = 150;
+  const LINK_DIST = 180;
 
   function frame() {
     if (!running) return;
@@ -210,25 +213,41 @@ function initAmbientBackground() {
       ctx.fillRect(orb.x - orb.r, oy - orb.r, orb.r * 2, orb.r * 2);
     }
 
-    // Update + draw nodes with light parallax and pointer influence.
+    // Update + draw nodes with light parallax, pointer influence,
+    // a soft glow halo, and a gentle twinkle.
     const pts = [];
     for (const n of nodes) {
       n.x += n.vx;
       n.y += n.vy;
+      n.phase += n.twinkle;
       if (n.x < -20) n.x = width + 20; else if (n.x > width + 20) n.x = -20;
       if (n.y < -20) n.y = height + 20; else if (n.y > height + 20) n.y = -20;
 
       const px = n.x + pointer.x * 18 * n.depth;
       const py = n.y + pointer.y * 18 * n.depth - parallaxY * n.depth;
-      pts.push({ x: px, y: py, r: n.r });
+      pts.push({ x: px, y: py });
 
+      const pulse = 0.75 + Math.sin(n.phase) * 0.25; // 0.5..1.0
+
+      // Glow halo
+      const haloR = n.r * 4;
+      const halo = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+      halo.addColorStop(0, `rgba(${colors.rgb}, ${colors.glowA * pulse})`);
+      halo.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = halo;
       ctx.beginPath();
-      ctx.arc(px, py, n.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${colors.rgb}, ${colors.nodeA})`;
+      ctx.arc(px, py, haloR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Core dot
+      ctx.beginPath();
+      ctx.arc(px, py, n.r * (0.85 + pulse * 0.3), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${colors.rgb}, ${colors.nodeA * pulse})`;
       ctx.fill();
     }
 
     // Connect nearby nodes.
+    ctx.lineWidth = 1.4;
     for (let i = 0; i < pts.length; i++) {
       for (let j = i + 1; j < pts.length; j++) {
         const dx = pts[i].x - pts[j].x;
@@ -237,7 +256,6 @@ function initAmbientBackground() {
         if (dist < LINK_DIST) {
           const a = (1 - dist / LINK_DIST) * colors.lineA;
           ctx.strokeStyle = `rgba(${colors.rgb}, ${a})`;
-          ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(pts[i].x, pts[i].y);
           ctx.lineTo(pts[j].x, pts[j].y);
