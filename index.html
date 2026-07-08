@@ -26,9 +26,15 @@
   <link rel="apple-touch-icon" href="assets/icons/app-icon.png">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="styles/main.css">
+  <link rel="stylesheet" href="styles/main.css?v=2">
 </head>
 <body>
+
+  <!-- ===== Ambient animated background (theme-adaptive) ===== -->
+  <canvas class="bg-canvas" aria-hidden="true"></canvas>
+
+  <!-- ===== Scroll progress indicator ===== -->
+  <div class="scroll-progress" aria-hidden="true"></div>
 
   <!-- ===== Navigation ===== -->
   <nav class="nav" role="navigation" aria-label="Main navigation">
@@ -589,6 +595,6 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="scripts/main.js"></script>
+  <script src="scripts/main.js?v=2"></script>
 </body>
 </html>

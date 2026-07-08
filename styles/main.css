@@ -53,15 +53,51 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Base color lives on html so the fixed ambient canvas (z-index:-1)
+     can show through transparent sections above it. */
+  background-color: var(--bg);
+  transition: background-color 0.3s ease;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--bg);
+  background-color: transparent;
   color: var(--text-primary);
   line-height: 1.6;
   overflow-x: hidden;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: color 0.3s ease;
+}
+
+/* --- Ambient Animated Background --- */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+.bg-canvas.ready {
+  opacity: 1;
+}
+
+/* --- Scroll Progress Indicator --- */
+.scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-light), var(--green));
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+  z-index: 1100;
+  pointer-events: none;
+  will-change: transform;
 }
 
 a {
@@ -415,8 +451,10 @@ img {
   padding: 100px 0;
 }
 
+/* Slight translucency so the ambient background reads through,
+   while keeping enough veil for text contrast. */
 .section-alt {
-  background: var(--bg-section-alt);
+  background: color-mix(in srgb, var(--bg-section-alt) 85%, transparent);
 }
 
 .section-header {
@@ -1006,13 +1044,15 @@ img {
 /* --- Animations --- */
 .fade-in {
   opacity: 0;
-  transform: translateY(24px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
 }
 
 .fade-in.visible {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0) translateX(0);
 }
 
 .fade-in-delay-1 { transition-delay: 0.1s; }
@@ -1023,6 +1063,59 @@ img {
 .fade-in-delay-6 { transition-delay: 0.6s; }
 .fade-in-delay-7 { transition-delay: 0.7s; }
 .fade-in-delay-8 { transition-delay: 0.8s; }
+
+/* The guide step is observed for scroll reveal, but the container itself
+   stays put — only its children animate directionally. */
+.guide-step.fade-in {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
+/* Directional reveal for the alternating guide steps:
+   text slides in from the left, the screenshot from the right. */
+.guide-step .guide-text {
+  opacity: 0;
+  transform: translateX(-32px);
+  transition: opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.guide-step .guide-frame {
+  opacity: 0;
+  transform: translateX(32px) scale(0.98);
+  transition: opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.08s,
+              transform 0.75s cubic-bezier(0.22, 1, 0.36, 1) 0.08s;
+}
+
+/* Even rows are visually mirrored, so mirror their entry direction too. */
+.guide-step:nth-child(even) .guide-text { transform: translateX(32px); }
+.guide-step:nth-child(even) .guide-frame { transform: translateX(-32px) scale(0.98); }
+
+.guide-step.visible .guide-text,
+.guide-step.visible .guide-frame {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+/* Honor users who prefer less motion: kill transforms and ambient drift. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .fade-in,
+  .guide-step .guide-text,
+  .guide-step .guide-frame {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .bg-canvas { display: none; }
+}
 
 /* --- Responsive --- */
 @media (max-width: 1024px) {
