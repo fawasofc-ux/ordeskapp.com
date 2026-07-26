@@ -67,6 +67,52 @@ check('Combined pieces bought', stock.totals.bought, 94);
 check('Seed sale net = amount when no commission', E.saleNet({ amount: 100000 }), 100000);
 check('Sale net applies commission %', E.saleNet({ amount: 100000, commissionPct: 10 }), 90000);
 
+console.log('— Gem codes (Trip 2 gemstone sales, date order) —');
+function checkEq(label, actual, expected) {
+  const ok = actual === expected;
+  if (!ok) failures++;
+  console.log(`${ok ? '  ok ' : 'FAIL '} ${label}: ${actual}${ok ? '' : ` (expected ${expected})`}`);
+}
+const coded = d.sales
+  .filter((s) => s.gemCode)
+  .sort((a, b) => String(a.gemCode).localeCompare(String(b.gemCode)));
+checkEq('Codes issued', coded.length, 6);
+checkEq('FS0001 is the earliest Trip 2 gem sale (2026-05-13)', coded[0].date, '2026-05-13');
+// Codes must ascend with date — FS0001 oldest through FS0006 newest.
+const dates = coded.map((s) => s.date);
+checkEq('Codes run in date order', JSON.stringify(dates), JSON.stringify([...dates].sort()));
+checkEq('Sarong sale carries no gem code', d.sales.find((s) => /sarong/i.test(s.description)).gemCode, undefined);
+checkEq('Trip 1 sales carry no gem codes', d.sales.filter((s) => s.tripId === 'trip1' && s.gemCode).length, 0);
+checkEq('Next code continues the run', E.nextGemCode(d), 'FS0007');
+
+console.log('— Returns —');
+// Returning a PENDING sale: no revenue, receivable gone, piece back in stock.
+const pendingSale = d.sales.find((s) => s.gemCode === 'FS0006'); // 150,000 pending, Trip 2
+const withQty = { ...d, sales: d.sales.map((s) => (s.id === pendingSale.id ? { ...s, qty: 1 } : s)) };
+const afterReturn = {
+  ...withQty,
+  sales: withQty.sales.map((s) => (s.id === pendingSale.id ? { ...s, qty: 1, returned: true } : s)),
+};
+check('Returned sale nets zero', E.saleNet({ ...pendingSale, returned: true }), 0);
+check('Pending return drops receivables by its value', E.liquidity(afterReturn).receivables, 681500 - 150000);
+check('Pending return drops gross sales', E.pnl(afterReturn, 'trip2').grossSales, 865025 - 150000);
+check('Pending return leaves cash in untouched', E.cashReconciliation(afterReturn).cashIn, 3836975);
+const stockAfter = E.stockByTrip(afterReturn).rows.find((r) => r.trip.id === 'trip2');
+check('Returned piece is back in stock', stockAfter.remaining, 94);
+check('Returned piece is not counted as sold', stockAfter.sold, 0);
+check('Returned pieces are reported', stockAfter.returned, 1);
+check('Returns summary value', E.returnsSummary(afterReturn, 'trip2').value, 150000);
+
+// Returning a RECEIVED sale (rare): the refund pulls the money back out.
+const recvSale = d.sales.find((s) => s.status === 'Received' && s.tripId === 'trip1');
+const afterRecvReturn = {
+  ...d,
+  sales: d.sales.map((s) => (s.id === recvSale.id ? { ...s, returned: true } : s)),
+};
+check('Received return reduces cash in (refund)', E.cashReconciliation(afterRecvReturn).cashIn, 3836975 - recvSale.amount);
+check('Received return reduces sales received', E.cashReconciliation(afterRecvReturn).salesReceived, 1494475 - recvSale.amount);
+check('Received return leaves receivables alone', E.liquidity(afterRecvReturn).receivables, 681500);
+
 console.log('— Expense categories —');
 const cats = Object.fromEntries(E.expensesByCategory(d).map((c) => [c.category, c.amount]));
 const expectCats = { Processing: 90000, Export: 98000, Vehicle: 8500, Testing: 2500, Commission: 2000, Equipment: 24500, Travel: 521950, Inventory: 151000, Misc: 3000 };

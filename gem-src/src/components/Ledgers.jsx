@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
-import { saleNet } from '../engine.js';
+import { saleNet, nextGemCode } from '../engine.js';
 
 // Schema-driven ledgers: one table + one form implementation for all five.
 function schemas(data) {
@@ -12,6 +12,7 @@ function schemas(data) {
       label: 'Sales',
       fields: [
         { key: 'date', label: 'Date', type: 'date' },
+        { key: 'gemCode', label: 'Gem Code', type: 'gemcode', autoValue: nextGemCode(data), hint: 'issued automatically in order — untick for non-gem items (e.g. sarong)' },
         { key: 'description', label: 'Description', type: 'text', full: true },
         { key: 'customer', label: 'Customer', type: 'text' },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
@@ -22,7 +23,7 @@ function schemas(data) {
       ],
       // Net is always derived from amount and commission %, never stored.
       computed: [{ key: 'net', label: 'Net (LKR)', accent: 'pos', compute: saleNet }],
-      defaults: { status: 'Pending', commissionPct: 0, qty: 1 },
+      defaults: { status: 'Pending', commissionPct: 0, qty: 1, gemCode: nextGemCode(data) },
     },
     purchases: {
       label: 'Purchases',
@@ -124,6 +125,23 @@ function RowForm({ schema, initial, onSave, onCancel }) {
                   />
                 )}
               </>
+            ) : f.type === 'gemcode' ? (
+              <>
+                <input
+                  value={form[f.key] || '— no code —'}
+                  readOnly
+                  tabIndex={-1}
+                  style={{ fontFamily: 'var(--mono)', opacity: form[f.key] ? 1 : 0.45 }}
+                />
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={!!form[f.key]}
+                    onChange={(e) => set(f.key, e.target.checked ? initial?.[f.key] || f.autoValue : '')}
+                  />
+                  Gemstone sale — auto code
+                </label>
+              </>
             ) : (
               <input
                 type={f.type}
@@ -166,7 +184,11 @@ export default function Ledgers({ data, tripFilter }) {
   const rows = useMemo(() => {
     let out = [...data[tab]];
     if (tab !== 'capital' && tab !== 'trips' && tripFilter) out = out.filter((r) => r.tripId === tripFilter);
-    if (tab === 'sales' && statusFilter) out = out.filter((r) => r.status === statusFilter);
+    if (tab === 'sales' && statusFilter) {
+      if (statusFilter === '__returned') out = out.filter((r) => r.returned);
+      else if (statusFilter === '__active') out = out.filter((r) => !r.returned);
+      else out = out.filter((r) => r.status === statusFilter && !r.returned);
+    }
     if (search) {
       const q = search.toLowerCase();
       out = out.filter((r) => JSON.stringify(r).toLowerCase().includes(q));
@@ -192,6 +214,28 @@ export default function Ledgers({ data, tripFilter }) {
     const label = row.description || row.name || 'this entry';
     if (confirm(`Delete "${label}"${row.amount ? ` (LKR ${fmt(row.amount)})` : ''}? This cannot be undone.`)) {
       deleteRow(tab, row.id);
+    }
+  }
+
+  // Returning a sale unwinds it everywhere: no revenue, no receivable, and the
+  // piece goes back into stock. A sale already Received also implies a refund,
+  // so cash in drops — spelled out in the confirm rather than done silently.
+  function onToggleReturn(row) {
+    const label = [row.gemCode, row.description].filter(Boolean).join(' · ') || 'this sale';
+    if (row.returned) {
+      if (confirm(`Undo the return on ${label}?\n\nIt counts as a live sale again (LKR ${fmt(row.amount)}) and the piece leaves stock.`)) {
+        updateRow('sales', row.id, { returned: false, returnDate: '' });
+      }
+      return;
+    }
+    const pieces = Number(row.qty) || 0;
+    const stockLine = pieces ? `\n• ${fmt(pieces)} piece(s) go back into stock` : '';
+    const moneyLine =
+      row.status === 'Received'
+        ? `\n• This sale was already RECEIVED — the return assumes you refunded LKR ${fmt(row.amount)}, so cash in drops by that amount.`
+        : `\n• The pending receivable of LKR ${fmt(saleNet(row))} is removed.`;
+    if (confirm(`Mark ${label} as RETURNED?${moneyLine}${stockLine}\n\nThe row stays in the ledger for history and can be undone.`)) {
+      updateRow('sales', row.id, { returned: true, returnDate: new Date().toISOString().slice(0, 10) });
     }
   }
 
@@ -228,6 +272,8 @@ export default function Ledgers({ data, tripFilter }) {
             <option value="">All statuses</option>
             <option value="Received">Received</option>
             <option value="Pending">Pending</option>
+            <option value="__returned">Returned only</option>
+            <option value="__active">Hide returned</option>
           </select>
         )}
         <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 200 }} />
@@ -245,16 +291,24 @@ export default function Ledgers({ data, tripFilter }) {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.id}>
+              <tr key={r.id} className={r.returned ? 'returned' : ''}>
                 {cols.map((f) => {
                   const numeric = f.type === 'number' || !!f.compute;
                   let content;
                   if (f.compute) {
                     content = <span className={f.accent || ''}>{fmt(f.compute(r))}</span>;
+                  } else if (f.key === 'gemCode') {
+                    content = r.gemCode ? <span className="gemcode">{r.gemCode}</span> : <span className="subtle">—</span>;
                   } else if (f.key === 'tripId') {
                     content = tripName(r.tripId);
                   } else if (f.key === 'status' && tab === 'sales') {
-                    content = <span className={`badge ${r.status === 'Received' ? 'ok' : 'warn'}`}>{r.status}</span>;
+                    content = r.returned ? (
+                      <span className="badge danger" title={r.returnDate ? `Returned ${r.returnDate}` : 'Returned'}>
+                        returned
+                      </span>
+                    ) : (
+                      <span className={`badge ${r.status === 'Received' ? 'ok' : 'warn'}`}>{r.status}</span>
+                    );
                   } else if (f.key === 'status') {
                     content = <span className={`badge ${r.status === 'Open' ? 'info' : 'ok'}`}>{r.status}</span>;
                   } else if (f.key === 'commissionPct') {
@@ -268,6 +322,15 @@ export default function Ledgers({ data, tripFilter }) {
                 })}
                 <td>
                   <div className="row-actions">
+                    {tab === 'sales' && (
+                      <button
+                        className={`btn icon ${r.returned ? '' : 'ghost'}`}
+                        onClick={() => onToggleReturn(r)}
+                        title={r.returned ? 'Undo this return' : 'Gem returned — reverse the sale and put the piece back in stock'}
+                      >
+                        {r.returned ? 'Undo' : '↩ Return'}
+                      </button>
+                    )}
                     <button className="btn ghost icon" onClick={() => setEditing({ row: r })}>Edit</button>
                     <button className="btn danger icon" onClick={() => onDelete(r)}>Del</button>
                   </div>

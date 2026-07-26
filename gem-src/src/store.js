@@ -8,8 +8,35 @@
 // cloud by rev (higher wins), so the same books follow you across browsers.
 
 import { schedulePush, reconcile, connectCloud } from './sync.js';
+import { nextGemCode } from './engine.js';
 
 const STORAGE_KEY = 'gem-dashboard-v1';
+
+// One-time backfill so books already saved in this browser / the cloud pick up
+// gem codes too (the seed alone would only cover a fresh install). Trip 2
+// gemstone sales are numbered in date order; the sarong sale is not a gemstone
+// and is skipped. Runs once, guarded by a flag, so codes are never renumbered.
+function backfillGemCodes(s) {
+  if (!s || s.migrations?.gemCodes) return s;
+  const targets = s.sales
+    .filter((r) => r.tripId === 'trip2' && !r.gemCode && !/sarong/i.test(r.description || ''))
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  const codes = new Map();
+  let cursor = { ...s, sales: s.sales };
+  for (const row of targets) {
+    const code = nextGemCode(cursor);
+    codes.set(row.id, code);
+    // Feed each assignment back in so the next code increments off it.
+    cursor = { ...cursor, sales: cursor.sales.map((r) => (r.id === row.id ? { ...r, gemCode: code } : r)) };
+  }
+
+  return {
+    ...s,
+    sales: s.sales.map((r) => (codes.has(r.id) ? { ...r, gemCode: codes.get(r.id) } : r)),
+    migrations: { ...(s.migrations || {}), gemCodes: true },
+  };
+}
 
 let state = null;
 let seedCache = null;
@@ -26,13 +53,26 @@ export function initStore(seed) {
     // rev 0 if pristine — so existing edits win over the initial cloud doc.
     state = { ...state, rev: JSON.stringify(state) === JSON.stringify(seedCache) ? 0 : 1 };
   }
-  emit();
+  applyMigrations();
   reconcile(state).then((cloudState) => {
     if (cloudState) {
       state = cloudState;
-      emit();
+      applyMigrations();
     }
   });
+}
+
+// Run pending migrations over the current state; if anything changed, treat it
+// as a mutation so the codes are persisted and synced like any other edit.
+function applyMigrations() {
+  const migrated = backfillGemCodes(state);
+  if (migrated === state) {
+    emit();
+    return;
+  }
+  state = { ...migrated, rev: (state.rev || 0) + 1 };
+  emit();
+  schedulePush(state);
 }
 
 function load() {

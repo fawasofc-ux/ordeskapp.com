@@ -91,6 +91,7 @@ export default function App() {
   const cats = E.expensesByCategory(data, scope);
   const recv = E.receivablesSplit(data, scope);
   const stock = E.stockByTrip(data);
+  const returns = E.returnsSummary(data, scope);
   const paperLoss = E.openTripPaperLoss(data);
   const scopeLabel = scope ? data.trips.find((t) => t.id === scope)?.name : 'All trips';
   const scopedPaperLoss = scope ? (E.isPaperLoss(data, scope) ? pnlScoped.netProfit : 0) : paperLoss;
@@ -247,6 +248,7 @@ export default function App() {
                 <th>Trip</th>
                 <th className="num">Pieces Bought</th>
                 <th className="num">Pieces Sold</th>
+                <th className="num">Returned</th>
                 <th className="num">Remaining</th>
                 <th className="num">Avg Cost / Pc</th>
                 <th className="num">Remaining Value (est.)</th>
@@ -258,6 +260,7 @@ export default function App() {
                   <td>{r.trip.name} <span className="subtle">{r.trip.status === 'Open' ? '● open' : '✓ closed'}</span></td>
                   <td className="num">{fmt(r.bought)}</td>
                   <td className="num amb">{fmt(r.sold)}</td>
+                  <td className={`num ${r.returned ? 'neg' : ''}`}>{r.returned ? fmt(r.returned) : <span className="subtle">—</span>}</td>
                   <td className={`num ${r.remaining > 0 ? 'cy' : ''}`}>{fmt(r.remaining)}</td>
                   <td className="num">{r.avgCost ? fmt(r.avgCost) : <span className="subtle">—</span>}</td>
                   <td className="num">{r.avgCost ? fmt(r.remainingValue) : <span className="subtle">—</span>}</td>
@@ -267,6 +270,7 @@ export default function App() {
                 <td>Combined</td>
                 <td className="num">{fmt(stock.totals.bought)}</td>
                 <td className="num">{fmt(stock.totals.sold)}</td>
+                <td className="num">{fmt(stock.totals.returned)}</td>
                 <td className="num">{fmt(stock.totals.remaining)}</td>
                 <td className="num"></td>
                 <td className="num">{fmt(stock.totals.remainingValue)}</td>
@@ -277,6 +281,15 @@ export default function App() {
             Lots are bought at a total price (no per-piece cost), so stock is tracked by <b>quantity</b>: pieces
             in from Purchases minus pieces out from Sales (the Qty column). Avg cost / remaining value are
             informational estimates (lot cost ÷ pieces) — the P&L above stays lot-based and is unaffected.
+            {returns.count > 0 && (
+              <>
+                {' '}Returned pieces come back into stock and earn nothing —{' '}
+                <span className="neg">
+                  {returns.count} return{returns.count > 1 ? 's' : ''} ({fmt(returns.pieces)} pc,{' '}
+                  {fmt(returns.value)} reversed)
+                </span>.
+              </>
+            )}
           </div>
         </div>
       </section>

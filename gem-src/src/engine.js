@@ -7,8 +7,11 @@ const byTrip = (rows, tripId) => (tripId ? rows.filter((r) => r.tripId === tripI
 
 // A sale's net revenue = amount (gross) less commission%. Existing entries carry
 // no commissionPct, so it defaults to 0 → net === amount → no change to any total.
+// A RETURNED sale nets zero: the goods came back, so it earns nothing, leaves no
+// receivable, and (if it had been received) the refund cancels the cash in. Every
+// money figure flows through saleNet, so returns unwind everywhere at once.
 export const saleCommission = (s) => (Number(s.amount) || 0) * ((Number(s.commissionPct) || 0) / 100);
-export const saleNet = (s) => (Number(s.amount) || 0) - saleCommission(s);
+export const saleNet = (s) => (s.returned ? 0 : (Number(s.amount) || 0) - saleCommission(s));
 
 const sumNet = (rows) => rows.reduce((t, s) => t + saleNet(s), 0);
 
@@ -91,25 +94,54 @@ export function receivablesSplit(data, tripId = null) {
 // the remainder at the lot's average cost. Money-side P&L stays lot-based and
 // unchanged; this average cost is an informational estimate only.
 export function stockByTrip(data) {
+  const qty = (rows) => rows.reduce((s, x) => s + (Number(x.qty) || 0), 0);
   const rows = data.trips.map((t) => {
     const purchases = data.purchases.filter((p) => p.tripId === t.id);
     const bought = purchases.reduce((s, p) => s + (Number(p.pieces) || 0), 0);
     const lotCost = purchases.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-    const sold = data.sales.filter((s) => s.tripId === t.id).reduce((s, x) => s + (Number(x.qty) || 0), 0);
+    const tripSales = data.sales.filter((s) => s.tripId === t.id);
+    // Returned pieces are back on the shelf, so they do not count as sold.
+    const sold = qty(tripSales.filter((s) => !s.returned));
+    const returned = qty(tripSales.filter((s) => s.returned));
     const remaining = bought - sold;
     const avgCost = bought > 0 ? lotCost / bought : 0;
-    return { trip: t, bought, sold, remaining, avgCost, remainingValue: avgCost * remaining };
+    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue: avgCost * remaining };
   });
   const totals = rows.reduce(
     (a, r) => ({
       bought: a.bought + r.bought,
       sold: a.sold + r.sold,
+      returned: a.returned + r.returned,
       remaining: a.remaining + r.remaining,
       remainingValue: a.remainingValue + r.remainingValue,
     }),
-    { bought: 0, sold: 0, remaining: 0, remainingValue: 0 },
+    { bought: 0, sold: 0, returned: 0, remaining: 0, remainingValue: 0 },
   );
   return { rows, totals };
+}
+
+// Returned sales — surfaced so a return is visible, not silently absorbed.
+export function returnsSummary(data, tripId = null) {
+  const rows = byTrip(data.sales, tripId).filter((s) => s.returned);
+  return {
+    count: rows.length,
+    pieces: rows.reduce((t, s) => t + (Number(s.qty) || 0), 0),
+    value: rows.reduce((t, s) => t + (Number(s.amount) || 0), 0),
+  };
+}
+
+// Sequential gem code (FS0001, FS0002 …) for gemstone sales. Derived from the
+// highest code already issued — including returned rows, so codes are never
+// reused. Purchases are deliberately not linked: lots have no per-piece identity.
+export const GEM_CODE_PREFIX = 'FS';
+
+export function nextGemCode(data, prefix = GEM_CODE_PREFIX) {
+  const re = new RegExp(`^${prefix}(\\d+)$`);
+  const highest = data.sales.reduce((max, s) => {
+    const m = re.exec(String(s.gemCode || '').trim());
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  return `${prefix}${String(highest + 1).padStart(4, '0')}`;
 }
 
 // True when a trip's loss is likely just unsold inventory (open trip, COGS > sales).

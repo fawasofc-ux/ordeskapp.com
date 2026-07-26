@@ -264,6 +264,40 @@ input:focus, select:focus {
   box-shadow: 0 0 10px rgba(41, 224, 255, 0.18);
 }
 input[type='number'] { font-family: var(--mono); }
+input[readonly] { color: var(--cyan); cursor: default; }
+
+/* checkbox + label pair (e.g. "Gemstone sale — auto code") */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.check input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+
+/* gem code — the piece's identity, so give it its own accent */
+.gemcode {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--violet);
+  letter-spacing: 0.04em;
+}
+
+/* returned sales stay visible for history, but read as struck-through */
+tr.returned td { opacity: 0.5; }
+tr.returned:hover td { opacity: 0.75; }
+tr.returned td:nth-child(-n + 3) { text-decoration: line-through; }
+tr.returned .badge, tr.returned .row-actions { text-decoration: none; }
 
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; opacity: 0; transition: opacity 0.15s ease; }
 tr:hover .row-actions { opacity: 1; }

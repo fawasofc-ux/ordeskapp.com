@@ -10,24 +10,41 @@ const ACCENTS = {
 };
 
 // Animates value changes with a count-up and a glow pulse on the card.
+// displayRef must mirror what is actually on screen every frame: if it only
+// tracked completed animations, a value changed twice in quick succession
+// would leave a stale origin behind and the card could freeze showing a
+// number that was never real. A money figure must always settle on the truth.
 function useCountUp(target, duration = 700) {
   const [display, setDisplay] = useState(target);
-  const fromRef = useRef(target);
+  const displayRef = useRef(target);
+
   useEffect(() => {
-    const from = fromRef.current;
-    if (from === target) return;
+    if (displayRef.current === target) return;
+
+    // requestAnimationFrame is paused in a background tab, which would strand
+    // the count mid-way — snap straight to the real value instead.
+    if (typeof document !== 'undefined' && document.hidden) {
+      displayRef.current = target;
+      setDisplay(target);
+      return;
+    }
+
+    const from = displayRef.current;
     const start = performance.now();
     let raf;
     const tick = (now) => {
       const t = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(from + (target - from) * eased);
+      // Land exactly on target on the final frame — never an eased approximation.
+      const next = t < 1 ? from + (target - from) * eased : target;
+      displayRef.current = next;
+      setDisplay(next);
       if (t < 1) raf = requestAnimationFrame(tick);
-      else fromRef.current = target;
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [target, duration]);
+
   return display;
 }
 
