@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { subscribe, getState, initStore, connectCloudSync } from './store.js';
-import { subscribeSync, getSyncStatus, getSyncDetail, flush } from './sync.js';
-import { isAuthed, logout, loadSeed } from './auth.js';
+import { subscribe, getState, initStore, subscribeStatus, getStatus, getStatusDetail, teardown } from './store.js';
+import { currentUser, signOut } from './db.js';
+import { hasAnonKey } from './supabase.js';
 import * as E from './engine.js';
 import { fmt, fmtFull } from './format.js';
 import Login from './components/Login.jsx';
+import SetupKey from './components/SetupKey.jsx';
+import Migrate from './components/Migrate.jsx';
 import KpiCard from './components/KpiCard.jsx';
 import PartnerTable from './components/PartnerTable.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
@@ -42,43 +44,56 @@ function useUpdateCheck() {
 }
 
 const SYNC_LABELS = {
-  boot: ['amb', '● connecting…'],
-  nokey: ['amb', '● local only — connect cloud'],
-  syncing: ['amb', '● syncing…'],
-  synced: ['pos', '● cloud synced'],
-  offline: ['neg', '● offline — saved locally'],
-  error: ['neg', '● sync error — saved locally'],
+  loading: ['amb', '● loading…'],
+  saving: ['amb', '● saving…'],
+  ready: ['pos', '● database live'],
+  offline: ['neg', '● offline — cached copy'],
+  error: ['neg', '● database error'],
 };
 
-async function promptConnectCloud() {
-  const token = window.prompt(
-    'Connect cloud sync (one time on this device):\n\n' +
-      'Paste a GitHub token with read/write Contents access to the private ' +
-      'fawasofc-ux/gem-data repo (a fine-grained PAT scoped to only that repo is best).',
-  );
-  if (!token || !token.trim()) return;
-  const res = await connectCloudSync(token);
-  if (!res.ok) window.alert(`Could not connect: ${res.error}`);
-}
-
 export default function App() {
-  const [authed, setAuthed] = useState(isAuthed());
+  const [keyReady, setKeyReady] = useState(hasAnonKey());
+  const [user, setUser] = useState(null);
+  const [booting, setBooting] = useState(true);
+  const [needsMigration, setNeedsMigration] = useState(false);
   const data = useSyncExternalStore(subscribe, getState);
-  const syncStatus = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const dbStatus = useSyncExternalStore(subscribeStatus, getStatus);
   const [tripFilter, setTripFilter] = useState(''); // '' = combined
   const updateReady = useUpdateCheck();
 
-  // After unlock (or reload with a live session), decrypt the seed and boot the store.
+  // Restore an existing session on reload.
   useEffect(() => {
-    if (!authed || data) return;
-    loadSeed().then((seed) => {
-      if (seed) initStore(seed);
-      else { logout(); setAuthed(false); }
-    });
-  }, [authed, data]);
+    if (!keyReady) { setBooting(false); return; }
+    currentUser()
+      .then((u) => setUser(u))
+      .catch(() => setUser(null))
+      .finally(() => setBooting(false));
+  }, [keyReady]);
 
-  if (!authed) return <Login onSuccess={() => setAuthed(true)} />;
-  if (!data) return <div className="login-wrap"><span className="subtle">Decrypting…</span></div>;
+  // Once signed in, load the ledgers out of Postgres.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    initStore(user.id)
+      .then(({ empty }) => { if (!cancelled) setNeedsMigration(empty); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user]);
+
+  async function handleSignOut() {
+    await signOut();
+    teardown();
+    setUser(null);
+    setNeedsMigration(false);
+  }
+
+  if (!keyReady) return <SetupKey onDone={() => setKeyReady(true)} />;
+  if (booting) return <div className="login-wrap"><span className="subtle">Connecting…</span></div>;
+  if (!user) return <Login onSuccess={setUser} />;
+  if (!data) return <div className="login-wrap"><span className="subtle">Loading ledgers…</span></div>;
+  if (needsMigration) {
+    return <Migrate onDone={() => setNeedsMigration(false)} onSkip={() => setNeedsMigration(false)} />;
+  }
 
   // — derive everything live from the ledgers —
   const scope = tripFilter || null;
@@ -107,6 +122,11 @@ export default function App() {
 
   return (
     <div className="app">
+      {__IS_STAGING__ && (
+        <div className="staging-banner">
+          STAGING — /gem/test · this is the review copy, live at /gem is unchanged
+        </div>
+      )}
       <header className="header">
         <div className="logo">GEM<span>·DASH</span></div>
         <div className="chips">
@@ -125,19 +145,14 @@ export default function App() {
           </button>
         )}
         <span
-          className={SYNC_LABELS[syncStatus]?.[0] || 'subtle'}
-          style={{ fontFamily: 'var(--mono)', fontSize: 11, cursor: syncStatus === 'nokey' ? 'pointer' : 'default' }}
-          onClick={syncStatus === 'nokey' ? promptConnectCloud : undefined}
-          title={
-            syncStatus === 'nokey'
-              ? 'Click to connect this device to the cloud database (paste token once)'
-              : getSyncDetail() || 'Every change is encrypted and saved to your private gem-data repo'
-          }
+          className={SYNC_LABELS[dbStatus]?.[0] || 'subtle'}
+          style={{ fontFamily: 'var(--mono)', fontSize: 11 }}
+          title={getStatusDetail() || 'Every change is saved straight to your Supabase database'}
         >
-          {SYNC_LABELS[syncStatus]?.[1] || syncStatus}
+          {SYNC_LABELS[dbStatus]?.[1] || dbStatus}
         </span>
         <span className="subtle">LKR · live from ledgers</span>
-        <button className="btn ghost icon" onClick={() => { flush(); logout(); setAuthed(false); }}>Lock</button>
+        <button className="btn ghost icon" onClick={handleSignOut}>Sign out</button>
       </header>
 
       <section className="kpis">
@@ -297,8 +312,8 @@ export default function App() {
       <Ledgers data={data} tripFilter={tripFilter} />
 
       <div className="footer-note">
-        Cloud database: every change is encrypted in this browser and committed to the private
-        gem-data repo (full history kept) · localStorage is the offline cache · all totals computed live.
+        Live Supabase database (Postgres) · signed in as {user.email} · changes save instantly and sync
+        across devices · offline shows a cached copy · all totals computed live from the ledgers.
       </div>
     </div>
   );

@@ -374,5 +374,20 @@ tr:hover .row-actions { opacity: 1; }
 .recharts-text { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
 .recharts-cartesian-grid line { stroke: rgba(255, 255, 255, 0.05); }
 
+/* unmistakable marker so the staging copy is never mistaken for live */
+.staging-banner {
+  background: rgba(255, 194, 71, 0.12);
+  border: 1px solid rgba(255, 194, 71, 0.5);
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 7px 12px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+}
+
 .footer-note { color: var(--muted); font-size: 11px; margin-top: 30px; text-align: center; }
 .footer-note button { margin-left: 10px; }

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { login } from '../auth.js';
+import { signIn } from '../db.js';
 
+// Real accounts now, backed by Supabase Auth — no shared password baked into
+// the bundle. The database enforces per-account access on top of this, so a
+// stolen page is not a stolen ledger.
 export default function Login({ onSuccess }) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -11,10 +14,15 @@ export default function Login({ onSuccess }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const ok = await login(username, password);
-    setBusy(false);
-    if (ok) onSuccess();
-    else setError('ACCESS DENIED — invalid credentials');
+    try {
+      const { user, error: err } = await signIn(email, password);
+      if (user) onSuccess(user);
+      else setError(err || 'ACCESS DENIED — invalid credentials');
+    } catch (ex) {
+      setError(String(ex.message || ex));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -23,15 +31,26 @@ export default function Login({ onSuccess }) {
         <div className="logo">GEM<span>·DASH</span></div>
         <span className="subtle">Private dashboard — authorised access only</span>
         <div className="field">
-          <label>Username</label>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoFocus
+            autoComplete="username"
+          />
         </div>
         <div className="field">
           <label>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
         </div>
         <button className="btn" type="submit" disabled={busy} style={{ width: '100%', marginTop: 8 }}>
-          {busy ? '...' : 'UNLOCK'}
+          {busy ? '…' : 'SIGN IN'}
         </button>
         {error && <div className="login-error">{error}</div>}
       </form>

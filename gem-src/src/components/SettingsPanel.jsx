@@ -1,5 +1,5 @@
 import React from 'react';
-import { updateSettings, resetToSeed } from '../store.js';
+import { updateSettings, reloadFromDb } from '../store.js';
 
 // The two manual inputs (inventory estimate, actual bank) + profit shares.
 export default function SettingsPanel({ settings }) {
@@ -41,14 +41,14 @@ export default function SettingsPanel({ settings }) {
       </div>
       <div className="subtle" style={{ marginTop: 14 }}>
         Everything else on this page is computed live from ledger entries.
+        {/* Pulls a fresh copy from Postgres. Deliberately not a "wipe and
+            reseed" button — against a real database that is a foot-gun. */}
         <button
           className="btn ghost icon"
           style={{ marginTop: 10, display: 'block' }}
-          onClick={() => {
-            if (confirm('Reset ALL data back to the original workbook seed? All edits will be lost.')) resetToSeed();
-          }}
+          onClick={() => reloadFromDb().catch((e) => alert(`Reload failed: ${e.message || e}`))}
         >
-          Reset to workbook seed
+          Reload from database
         </button>
       </div>
     </div>

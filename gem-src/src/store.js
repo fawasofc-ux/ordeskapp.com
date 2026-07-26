@@ -1,105 +1,49 @@
-// Data layer: repository-style API over an in-memory state, persisted two
-// ways — localStorage (instant, offline cache) and the encrypted cloud
-// document in the private gem-data repo (via sync.js, write-behind). The UI
-// only talks to this module. The seed arrives decrypted from auth.js at init
-// time; it is never imported in plaintext, so it never lands in the bundle.
+// Data layer: the single thing the UI talks to. Postgres (Supabase) is the
+// source of truth; localStorage is kept purely as an offline read cache so the
+// dashboard still renders without a connection.
 //
-// state.rev increments on every user mutation; boot reconciles local vs
-// cloud by rev (higher wins), so the same books follow you across browsers.
+// Writes are optimistic — the UI updates instantly, then the row goes to the
+// database. If that write fails the local change is rolled back and the error
+// surfaced, because a books app must never show a number it did not save.
 
-import { schedulePush, reconcile, connectCloud } from './sync.js';
-import { nextGemCode } from './engine.js';
+import * as db from './db.js';
 
-const STORAGE_KEY = 'gem-dashboard-v1';
+const CACHE_KEY = 'gem-dashboard-cache-v2';
 
-// One-time backfill so books already saved in this browser / the cloud pick up
-// gem codes too (the seed alone would only cover a fresh install). Trip 2
-// gemstone sales are numbered in date order; the sarong sale is not a gemstone
-// and is skipped. Runs once, guarded by a flag, so codes are never renumbered.
-function backfillGemCodes(s) {
-  if (!s || s.migrations?.gemCodes) return s;
-  const targets = s.sales
-    .filter((r) => r.tripId === 'trip2' && !r.gemCode && !/sarong/i.test(r.description || ''))
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-
-  const codes = new Map();
-  let cursor = { ...s, sales: s.sales };
-  for (const row of targets) {
-    const code = nextGemCode(cursor);
-    codes.set(row.id, code);
-    // Feed each assignment back in so the next code increments off it.
-    cursor = { ...cursor, sales: cursor.sales.map((r) => (r.id === row.id ? { ...r, gemCode: code } : r)) };
-  }
-
-  return {
-    ...s,
-    sales: s.sales.map((r) => (codes.has(r.id) ? { ...r, gemCode: codes.get(r.id) } : r)),
-    migrations: { ...(s.migrations || {}), gemCodes: true },
-  };
-}
+// Fallback only, for a brand-new empty database. Deliberately carries no real
+// partner names: this ships in a public bundle, and the actual partners and
+// shares come from the account's own settings row once data is migrated.
+export const DEFAULT_SETTINGS = {
+  shares: {},
+  partners: [],
+  categories: ['Processing', 'Export', 'Vehicle', 'Testing', 'Commission', 'Equipment', 'Travel', 'Inventory', 'Misc'],
+  inventoryEstimate: 0,
+  actualBank: 0,
+};
 
 let state = null;
-let seedCache = null;
+let ownerId = null;
+let unsubscribeRealtime = null;
 const listeners = new Set();
 
-// Called once after login/unlock with the decrypted workbook seed.
-// Boots from the local cache instantly, then reconciles with the cloud
-// in the background (swapping state in if the cloud copy is newer).
-export function initStore(seed) {
-  seedCache = seed;
-  state = load();
-  if (state.rev == null) {
-    // Pre-cloud local data: rev 1 if it was ever edited away from the seed,
-    // rev 0 if pristine — so existing edits win over the initial cloud doc.
-    state = { ...state, rev: JSON.stringify(state) === JSON.stringify(seedCache) ? 0 : 1 };
-  }
-  applyMigrations();
-  reconcile(state).then((cloudState) => {
-    if (cloudState) {
-      state = cloudState;
-      applyMigrations();
-    }
-  });
+// ---- status pill ----
+// 'loading' | 'ready' | 'saving' | 'error' | 'offline'
+let status = 'loading';
+let statusDetail = '';
+const statusListeners = new Set();
+
+function setStatus(next, detail = '') {
+  status = next;
+  statusDetail = detail;
+  statusListeners.forEach((fn) => fn());
 }
 
-// Run pending migrations over the current state; if anything changed, treat it
-// as a mutation so the codes are persisted and synced like any other edit.
-function applyMigrations() {
-  const migrated = backfillGemCodes(state);
-  if (migrated === state) {
-    emit();
-    return;
-  }
-  state = { ...migrated, rev: (state.rev || 0) + 1 };
-  emit();
-  schedulePush(state);
+export function subscribeStatus(fn) {
+  statusListeners.add(fn);
+  return () => statusListeners.delete(fn);
 }
-
-function load() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {
-    console.error('Failed to load saved data, falling back to seed', e);
-  }
-  return structuredClone(seedCache);
-}
-
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function emit() {
-  persist();
-  listeners.forEach((fn) => fn());
-}
-
-// Every user mutation funnels through here: bump rev, persist, sync.
-function commit(next) {
-  state = { ...next, rev: (state.rev || 0) + 1 };
-  emit();
-  schedulePush(state);
-}
+export const getStatus = () => status;
+export const getStatusDetail = () => statusDetail;
 
 export function subscribe(fn) {
   listeners.add(fn);
@@ -110,26 +54,124 @@ export function getState() {
   return state;
 }
 
-const newId = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-
-// collection: 'sales' | 'purchases' | 'expenses' | 'draws' | 'capital' | 'trips'
-export function addRow(collection, row) {
-  commit({ ...state, [collection]: [...state[collection], { ...row, id: newId() }] });
+function emit() {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(state));
+  } catch {
+    /* cache is best-effort */
+  }
+  listeners.forEach((fn) => fn());
 }
 
-export function updateRow(collection, id, patch) {
-  commit({
-    ...state,
-    [collection]: state[collection].map((r) => (r.id === id ? { ...r, ...patch } : r)),
+function readCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// ---- boot ----
+
+export async function initStore(userId) {
+  ownerId = userId;
+  setStatus('loading');
+  try {
+    const loaded = await db.loadAll();
+    state = { ...loaded, settings: loaded.settings || DEFAULT_SETTINGS };
+    emit();
+    setStatus('ready');
+    startRealtime();
+    return { empty: db.isEmpty(loaded) };
+  } catch (e) {
+    // No connection: fall back to the cached copy so the dashboard still works.
+    const cached = readCache();
+    if (cached) {
+      state = cached;
+      emit();
+      setStatus('offline', String(e.message || e));
+      return { empty: false, offline: true };
+    }
+    setStatus('error', String(e.message || e));
+    throw e;
+  }
+}
+
+function startRealtime() {
+  if (unsubscribeRealtime) unsubscribeRealtime();
+  unsubscribeRealtime = db.subscribeRealtime(() => {
+    // Another device changed something — re-pull rather than guess.
+    db.loadAll()
+      .then((loaded) => {
+        state = { ...loaded, settings: loaded.settings || DEFAULT_SETTINGS };
+        emit();
+      })
+      .catch(() => {});
   });
 }
 
-export function deleteRow(collection, id) {
-  commit({ ...state, [collection]: state[collection].filter((r) => r.id !== id) });
+export async function reloadFromDb() {
+  setStatus('loading');
+  const loaded = await db.loadAll();
+  state = { ...loaded, settings: loaded.settings || DEFAULT_SETTINGS };
+  emit();
+  setStatus('ready');
 }
 
-export function updateSettings(patch) {
-  commit({ ...state, settings: { ...state.settings, ...patch } });
+export function teardown() {
+  if (unsubscribeRealtime) unsubscribeRealtime();
+  unsubscribeRealtime = null;
+  state = null;
+  ownerId = null;
+}
+
+// ---- writes (optimistic, with rollback) ----
+
+const newId = () => `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+async function withRollback(nextState, writeFn) {
+  const previous = state;
+  state = nextState;
+  emit();
+  setStatus('saving');
+  try {
+    await writeFn();
+    setStatus('ready');
+  } catch (e) {
+    state = previous; // never leave an unsaved number on screen
+    emit();
+    setStatus('error', String(e.message || e));
+    alert(`Could not save to the database — the change was undone.\n\n${e.message || e}`);
+  }
+}
+
+export async function addRow(collection, row) {
+  const record = { ...row, id: newId() };
+  await withRollback(
+    { ...state, [collection]: [...state[collection], record] },
+    () => db.insertRow(collection, record),
+  );
+}
+
+export async function updateRow(collection, id, patch) {
+  const merged = { ...state[collection].find((r) => r.id === id), ...patch };
+  await withRollback(
+    { ...state, [collection]: state[collection].map((r) => (r.id === id ? merged : r)) },
+    () => db.updateRowDb(collection, id, merged),
+  );
+}
+
+export async function deleteRow(collection, id) {
+  await withRollback(
+    { ...state, [collection]: state[collection].filter((r) => r.id !== id) },
+    () => db.deleteRowDb(collection, id),
+  );
+}
+
+export async function updateSettings(patch) {
+  const next = { ...state.settings, ...patch };
+  await withRollback({ ...state, settings: next }, () => db.saveSettings(next, ownerId));
 }
 
 export function addCategory(name) {
@@ -144,18 +186,29 @@ export function addPartner(name, sharePct = 0) {
   updateSettings({ partners: [...partners, name], shares: { ...shares, [name]: sharePct } });
 }
 
-// One-time device setup: pasted token → validate, store, first sync.
-// Swaps in the cloud state if it is newer than this browser's copy.
-export async function connectCloudSync(token) {
-  const res = await connectCloud(token, state);
-  if (res.ok && res.state) {
-    state = res.state;
-    emit();
+// ---- migration from the pre-database browser copy ----
+
+const LEGACY_KEYS = ['gem-dashboard-v1'];
+
+// The old app stored plaintext state under gem-dashboard-v1 on this same
+// origin, so the staging build can read the real books directly.
+export function findLegacyData() {
+  for (const key of LEGACY_KEYS) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.sales)) return { key, data: parsed };
+    } catch {
+      /* ignore malformed */
+    }
   }
-  return res;
+  return null;
 }
 
-export function resetToSeed() {
-  if (!seedCache) return;
-  commit(structuredClone(seedCache));
+export async function runMigration(legacyState, onProgress) {
+  setStatus('saving');
+  const counts = await db.migrateLocalState(legacyState, ownerId, onProgress);
+  await reloadFromDb();
+  return counts;
 }
