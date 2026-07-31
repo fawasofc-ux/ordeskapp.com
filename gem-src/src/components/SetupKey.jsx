@@ -36,7 +36,9 @@ export default function SetupKey({ onDone }) {
     <div className="login-wrap">
       <form className="login-box" onSubmit={submit} style={{ maxWidth: 460 }}>
         <div className="logo">GEM<span>·DASH</span></div>
-        <span className="subtle">Staging — one-time connection setup</span>
+        <span className="subtle">
+          {__IS_STAGING__ ? 'Staging — ' : ''}One-time connection setup
+        </span>
         <div className="field" style={{ textAlign: 'left' }}>
           <label>Supabase anon / publishable key</label>
           <input
