@@ -49,10 +49,13 @@ create table if not exists public.gem_sales (
   updated_at     timestamptz not null default now()
 );
 
+-- Unit price is deliberately NOT a column: it is amount / pieces, derived in
+-- the app so it can never drift out of step with the figures it comes from.
 create table if not exists public.gem_purchases (
   id             text primary key,
   owner          uuid not null default auth.uid() references auth.users(id) on delete cascade,
   date           text,
+  lot_id         text,
   trip_id        text,
   pieces         numeric,
   funding_source text,
@@ -60,6 +63,9 @@ create table if not exists public.gem_purchases (
   amount         numeric not null default 0,
   updated_at     timestamptz not null default now()
 );
+
+-- Added after the first schema release; harmless when the column exists.
+alter table public.gem_purchases add column if not exists lot_id text;
 
 create table if not exists public.gem_expenses (
   id          text primary key,

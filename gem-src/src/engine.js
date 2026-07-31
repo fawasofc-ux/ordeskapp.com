@@ -89,10 +89,20 @@ export function receivablesSplit(data, tripId = null) {
   };
 }
 
+// A lot's unit price = total lot cost / pieces in the lot. Derived, never
+// stored, so it can never drift from the amount and piece count it comes from.
+// Returns 0 when the lot has no piece count (nothing to divide by).
+export function purchaseUnitPrice(p) {
+  const pieces = Number(p?.pieces) || 0;
+  return pieces > 0 ? (Number(p?.amount) || 0) / pieces : 0;
+}
+
 // Quantity accounting for gem stock. Purchases arrive as a lot (a total cost for
-// N pieces — no per-piece price), so we count pieces in vs pieces out and value
-// the remainder at the lot's average cost. Money-side P&L stays lot-based and
-// unchanged; this average cost is an informational estimate only.
+// N pieces), so we count pieces in vs pieces out and value the remainder from
+// the lots' unit prices. Sales are not tied to a specific lot, so the trip's
+// remaining pieces are valued at the weighted-average unit price of its lots —
+// which is the honest figure when you cannot say which lot a sold piece left.
+// Money-side P&L stays lot-based and unchanged; this valuation is an estimate.
 export function stockByTrip(data) {
   const qty = (rows) => rows.reduce((s, x) => s + (Number(x.qty) || 0), 0);
   const rows = data.trips.map((t) => {
@@ -104,8 +114,21 @@ export function stockByTrip(data) {
     const sold = qty(tripSales.filter((s) => !s.returned));
     const returned = qty(tripSales.filter((s) => s.returned));
     const remaining = bought - sold;
-    const avgCost = bought > 0 ? lotCost / bought : 0;
-    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue: avgCost * remaining };
+    // Weighted average of the lots' unit prices — identical to lotCost/bought,
+    // but expressed as what it is so the stock value traces back to unit price.
+    const avgCost = bought > 0
+      ? purchases.reduce((s, p) => s + purchaseUnitPrice(p) * (Number(p.pieces) || 0), 0) / bought
+      : 0;
+    const lots = purchases.map((p) => ({
+      id: p.id,
+      lotId: p.lotId || '',
+      date: p.date || '',
+      description: p.description || '',
+      pieces: Number(p.pieces) || 0,
+      amount: Number(p.amount) || 0,
+      unitPrice: purchaseUnitPrice(p),
+    }));
+    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue: avgCost * remaining, lots };
   });
   const totals = rows.reduce(
     (a, r) => ({
@@ -142,6 +165,40 @@ export function nextGemCode(data, prefix = GEM_CODE_PREFIX) {
     return m ? Math.max(max, Number(m[1])) : max;
   }, 0);
   return `${prefix}${String(highest + 1).padStart(4, '0')}`;
+}
+
+// Sequential gem lot id (GL001, GL002 …) identifying each purchased lot.
+export const LOT_ID_PREFIX = 'GL';
+
+export function nextLotId(data, prefix = LOT_ID_PREFIX) {
+  const re = new RegExp(`^${prefix}(\\d+)$`);
+  const highest = (data.purchases || []).reduce((max, p) => {
+    const m = re.exec(String(p.lotId || '').trim());
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  return `${prefix}${String(highest + 1).padStart(3, '0')}`;
+}
+
+// Assigns lot ids to purchases missing one, oldest first, continuing from the
+// highest id already issued so existing ids are never renumbered. Returns the
+// new purchases array plus the ids assigned, or null when nothing was missing.
+export function assignMissingLotIds(purchases) {
+  const missing = purchases
+    .filter((p) => !p.lotId)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  if (!missing.length) return null;
+
+  const assigned = new Map();
+  let cursor = { purchases };
+  for (const row of missing) {
+    const id = nextLotId(cursor);
+    assigned.set(row.id, id);
+    cursor = { purchases: cursor.purchases.map((p) => (p.id === row.id ? { ...p, lotId: id } : p)) };
+  }
+  return {
+    purchases: purchases.map((p) => (assigned.has(p.id) ? { ...p, lotId: assigned.get(p.id) } : p)),
+    assigned,
+  };
 }
 
 // True when a trip's loss is likely just unsold inventory (open trip, COGS > sales).

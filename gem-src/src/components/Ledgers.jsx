@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
-import { saleNet, nextGemCode } from '../engine.js';
+import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice } from '../engine.js';
+import { buildColumns, totalColumns, firstTotalIndex } from '../columns.js';
 
 // Schema-driven ledgers: one table + one form implementation for all five.
 function schemas(data) {
@@ -30,10 +31,23 @@ function schemas(data) {
       fields: [
         { key: 'date', label: 'Date', type: 'date' },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
+        { key: 'lotId', label: 'Gem Lot ID', type: 'gemcode', autoValue: nextLotId(data), checkLabel: 'Track as a gem lot — auto id', hint: 'issued automatically per purchased lot' },
         { key: 'pieces', label: 'Qty (pieces)', type: 'number', hint: 'pieces in the lot — adds to trip stock' },
         { key: 'fundingSource', label: 'Funding source', type: 'text' },
         { key: 'description', label: 'Description', type: 'text', full: true },
-        { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'total lot cost (no per-piece price)' },
+        { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'total lot cost' },
+      ],
+      // Unit price is derived (amount ÷ qty) and drives the stock valuation,
+      // so it is never stored — it cannot drift from the figures behind it.
+      computed: [
+        {
+          key: 'unitPrice',
+          label: 'Unit Price (LKR)',
+          after: 'description',
+          accent: 'cy',
+          noTotal: true,
+          compute: purchaseUnitPrice,
+        },
       ],
     },
     expenses: {
@@ -139,7 +153,7 @@ function RowForm({ schema, initial, onSave, onCancel }) {
                     checked={!!form[f.key]}
                     onChange={(e) => set(f.key, e.target.checked ? initial?.[f.key] || f.autoValue : '')}
                   />
-                  Gemstone sale — auto code
+                  {f.checkLabel || 'Gemstone sale — auto code'}
                 </label>
               </>
             ) : (
@@ -160,6 +174,19 @@ function RowForm({ schema, initial, onSave, onCancel }) {
           Net after commission ={' '}
           <span className="pos">{fmt(saleNet({ amount: form.amount, commissionPct: form.commissionPct }))}</span>
           {Number(form.commissionPct) > 0 && ` (−${fmt((Number(form.amount) || 0) * (Number(form.commissionPct) || 0) / 100)} commission)`}
+        </div>
+      )}
+      {schema.computed?.some((c) => c.key === 'unitPrice') && (
+        <div className="subtle" style={{ marginTop: 12, fontFamily: 'var(--mono)' }}>
+          Unit price ={' '}
+          {Number(form.pieces) > 0 ? (
+            <>
+              <span className="cy">{fmt(purchaseUnitPrice({ amount: form.amount, pieces: form.pieces }))}</span>
+              {` (${fmt(form.amount || 0)} ÷ ${fmt(form.pieces)} pcs) — used to value remaining stock`}
+            </>
+          ) : (
+            <span className="amb">enter a qty to value this lot per piece</span>
+          )}
         </div>
       )}
       <div className="modal-actions">
@@ -248,12 +275,10 @@ export default function Ledgers({ data, tripFilter }) {
     );
   }
 
-  const computedCols = schema.computed || [];
-  const cols = [...schema.fields, ...computedCols];
-  // Columns whose values sum meaningfully in the TOTAL row.
-  const totalCols = cols.filter((c) => (c.type === 'number' || c.compute) && !c.noTotal);
+  const cols = buildColumns(schema);
+  const totalCols = totalColumns(cols);
   const colTotal = (c) => rows.reduce((t, r) => t + (c.compute ? c.compute(r) : Number(r[c.key]) || 0), 0);
-  const firstTotalIdx = cols.findIndex((c) => totalCols.includes(c));
+  const firstTotalIdx = firstTotalIndex(cols);
 
   return (
     <div className="panel span12">
@@ -297,8 +322,8 @@ export default function Ledgers({ data, tripFilter }) {
                   let content;
                   if (f.compute) {
                     content = <span className={f.accent || ''}>{fmt(f.compute(r))}</span>;
-                  } else if (f.key === 'gemCode') {
-                    content = r.gemCode ? <span className="gemcode">{r.gemCode}</span> : <span className="subtle">—</span>;
+                  } else if (f.type === 'gemcode') {
+                    content = r[f.key] ? <span className="gemcode">{r[f.key]}</span> : <span className="subtle">—</span>;
                   } else if (f.key === 'tripId') {
                     content = tripName(r.tripId);
                   } else if (f.key === 'status' && tab === 'sales') {
@@ -342,8 +367,8 @@ export default function Ledgers({ data, tripFilter }) {
             )}
             {tab !== 'trips' && rows.length > 0 && (
               <tr className="total-row">
-                <td colSpan={Math.max(1, firstTotalIdx)}>TOTAL ({rows.length} entries)</td>
-                {cols.slice(Math.max(1, firstTotalIdx)).map((c) => (
+                <td colSpan={firstTotalIdx}>TOTAL ({rows.length} entries)</td>
+                {cols.slice(firstTotalIdx).map((c) => (
                   <td key={c.key} className={c.type === 'number' || c.compute ? 'num' : ''}>
                     {totalCols.includes(c) ? fmt(colTotal(c)) : ''}
                   </td>

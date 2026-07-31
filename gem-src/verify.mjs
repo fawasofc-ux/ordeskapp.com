@@ -113,6 +113,29 @@ check('Received return reduces cash in (refund)', E.cashReconciliation(afterRecv
 check('Received return reduces sales received', E.cashReconciliation(afterRecvReturn).salesReceived, 1494475 - recvSale.amount);
 check('Received return leaves receivables alone', E.liquidity(afterRecvReturn).receivables, 681500);
 
+console.log('— Gem lot ids & unit price —');
+const lots = d.purchases.filter((p) => p.lotId).sort((a, b) => a.lotId.localeCompare(b.lotId));
+checkEq('Lot ids issued', lots.length, 3);
+checkEq('GL001 is the earliest purchase', lots[0].date, '2025-01-01');
+checkEq('Lot ids run in date order', JSON.stringify(lots.map((p) => p.date)), JSON.stringify(lots.map((p) => p.date).sort()));
+checkEq('Next lot id continues the run', E.nextLotId(d), 'GL004');
+// Unit price = amount / pieces, and must reconcile back to the lot total.
+check('30-piece lot unit price', E.purchaseUnitPrice(d.purchases[1]), 691525 / 30);
+check('64-piece lot unit price', E.purchaseUnitPrice(d.purchases[2]), 1700000 / 64);
+check('Lot with no piece count has no unit price', E.purchaseUnitPrice(d.purchases[0]), 0);
+check('Unit price x pieces rebuilds the lot cost', E.purchaseUnitPrice(d.purchases[2]) * 64, 1700000);
+// Stock value must be driven by unit prices and still reconcile to COGS.
+const st2 = E.stockByTrip(d).rows.find((r) => r.trip.id === 'trip2');
+check('Trip 2 avg unit price', st2.avgCost, 2391525 / 94);
+check('Unsold stock valued at unit price', st2.remainingValue, 2391525);
+check('Lot detail exposed', st2.lots.length, 2);
+// Backfill assigns ids without renumbering the ones already issued.
+const stripped = d.purchases.map(({ lotId, ...rest }) => rest);
+checkEq('Backfill assigns all missing ids', E.assignMissingLotIds(stripped).purchases.map((p) => p.lotId).join(','), 'GL001,GL002,GL003');
+checkEq('Backfill is a no-op when nothing is missing', E.assignMissingLotIds(d.purchases), null);
+const partial = d.purchases.map((p, i) => (i === 1 ? { ...p, lotId: undefined } : p));
+checkEq('Backfill continues past existing ids', E.assignMissingLotIds(partial).assigned.size, 1);
+
 console.log('— Expense categories —');
 const cats = Object.fromEntries(E.expensesByCategory(d).map((c) => [c.category, c.amount]));
 const expectCats = { Processing: 90000, Export: 98000, Vehicle: 8500, Testing: 2500, Commission: 2000, Equipment: 24500, Travel: 521950, Inventory: 151000, Misc: 3000 };

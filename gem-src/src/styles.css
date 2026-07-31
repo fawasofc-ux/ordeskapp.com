@@ -293,6 +293,11 @@ input[readonly] { color: var(--cyan); cursor: default; }
   letter-spacing: 0.04em;
 }
 
+/* per-lot detail rows sit visually under their trip summary row */
+tr.lot-row td { font-size: 12px; opacity: 0.72; padding-top: 5px; padding-bottom: 5px; }
+tr.lot-row td:first-child { padding-left: 26px; }
+tr.lot-row:hover td { opacity: 1; }
+
 /* returned sales stay visible for history, but read as struck-through */
 tr.returned td { opacity: 0.5; }
 tr.returned:hover td { opacity: 0.75; }

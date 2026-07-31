@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { subscribe, getState, initStore, subscribeStatus, getStatus, getStatusDetail, teardown } from './store.js';
+import { subscribe, getState, initStore, subscribeStatus, getStatus, getStatusDetail, teardown, updateSettings } from './store.js';
 import { currentUser, signOut } from './db.js';
 import { hasAnonKey } from './supabase.js';
 import * as E from './engine.js';
@@ -311,6 +311,23 @@ export default function App() {
                   <td className="num">{r.avgCost ? fmt(r.remainingValue) : <span className="subtle">—</span>}</td>
                 </tr>
               ))}
+              {/* Lot-level detail: where each unit price comes from. */}
+              {stock.rows.flatMap((r) =>
+                r.lots.filter((l) => l.pieces > 0).map((l) => (
+                  <tr key={l.id} className="lot-row">
+                    <td>
+                      <span className="gemcode">{l.lotId || '—'}</span>{' '}
+                      <span className="subtle">{l.description}</span>
+                    </td>
+                    <td className="num">{fmt(l.pieces)}</td>
+                    <td className="num" />
+                    <td className="num" />
+                    <td className="num" />
+                    <td className="num cy">{fmt(l.unitPrice)}</td>
+                    <td className="num">{fmt(l.amount)}</td>
+                  </tr>
+                )),
+              )}
               <tr className="total-row">
                 <td>Combined</td>
                 <td className="num">{fmt(stock.totals.bought)}</td>
@@ -323,9 +340,29 @@ export default function App() {
             </tbody>
           </table>
           <div className="subtle" style={{ marginTop: 10 }}>
-            Lots are bought at a total price (no per-piece cost), so stock is tracked by <b>quantity</b>: pieces
-            in from Purchases minus pieces out from Sales (the Qty column). Avg cost / remaining value are
-            informational estimates (lot cost ÷ pieces) — the P&L above stays lot-based and is unaffected.
+            Each lot's <b>unit price</b> (amount ÷ qty, shown in Purchases) values the remaining stock.
+            Sales are not tied to a specific lot, so remaining pieces are valued at the weighted-average
+            unit price of that trip's lots. The P&L above stays lot-based and is unaffected.
+            {stock.totals.remainingValue > 0 && (
+              <>
+                {' '}Stock value from unit prices:{' '}
+                <span className="cy">LKR {fmt(stock.totals.remainingValue)}</span>
+                {Math.abs(stock.totals.remainingValue - liq.inventory) > 0.5 && (
+                  <>
+                    {' '}vs manual estimate <span className="amb">LKR {fmt(liq.inventory)}</span>{' '}
+                    <button
+                      className="btn ghost icon"
+                      onClick={() =>
+                        updateSettings({ inventoryEstimate: Math.round(stock.totals.remainingValue * 100) / 100 })
+                      }
+                      title="Set the manual inventory estimate to the value computed from unit prices"
+                    >
+                      use computed
+                    </button>
+                  </>
+                )}
+              </>
+            )}
             {returns.count > 0 && (
               <>
                 {' '}Returned pieces come back into stock and earn nothing —{' '}

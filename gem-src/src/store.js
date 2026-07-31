@@ -7,6 +7,7 @@
 // surfaced, because a books app must never show a number it did not save.
 
 import * as db from './db.js';
+import { assignMissingLotIds } from './engine.js';
 
 const CACHE_KEY = 'gem-dashboard-cache-v2';
 
@@ -83,6 +84,7 @@ export async function initStore(userId) {
     emit();
     setStatus('ready');
     startRealtime();
+    await backfillLotIds();
     return { empty: db.isEmpty(loaded) };
   } catch (e) {
     // No connection: fall back to the cached copy so the dashboard still works.
@@ -95,6 +97,27 @@ export async function initStore(userId) {
     }
     setStatus('error', String(e.message || e));
     throw e;
+  }
+}
+
+// Purchases recorded before lot ids existed get one assigned in date order and
+// written back, so every lot is identifiable. Runs once — after the first pass
+// nothing is missing, so it is a no-op on subsequent loads.
+async function backfillLotIds() {
+  const result = assignMissingLotIds(state.purchases || []);
+  if (!result) return;
+  const previous = state;
+  state = { ...state, purchases: result.purchases };
+  emit();
+  try {
+    for (const [rowId, lotId] of result.assigned) {
+      const row = result.purchases.find((p) => p.id === rowId);
+      await db.updateRowDb('purchases', rowId, row);
+    }
+  } catch (e) {
+    state = previous; // leave them unassigned rather than half-written
+    emit();
+    setStatus('error', `Could not assign lot ids: ${e.message || e}`);
   }
 }
 
@@ -208,7 +231,11 @@ export function findLegacyData() {
 
 export async function runMigration(legacyState, onProgress) {
   setStatus('saving');
-  const counts = await db.migrateLocalState(legacyState, ownerId, onProgress);
+  // Assign lot ids before upload so they land with the initial insert rather
+  // than needing a second pass of updates afterwards.
+  const withLots = assignMissingLotIds(legacyState.purchases || []);
+  const prepared = withLots ? { ...legacyState, purchases: withLots.purchases } : legacyState;
+  const counts = await db.migrateLocalState(prepared, ownerId, onProgress);
   await reloadFromDb();
   return counts;
 }

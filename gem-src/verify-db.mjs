@@ -52,6 +52,10 @@ check('Empty dates stay empty (not null)', roundTripped.expenses.find((e) => e.d
 check('Trip links intact', roundTripped.sales.filter((s) => s.tripId === 'trip2').length, seedData.sales.filter((s) => s.tripId === 'trip2').length);
 check('Funding source preserved', roundTripped.purchases[2].fundingSource, seedData.purchases[2].fundingSource);
 check('Pieces preserved', roundTripped.purchases[2].pieces, seedData.purchases[2].pieces);
+check('Lot ids preserved', roundTripped.purchases.map((p) => p.lotId).join(','), 'GL001,GL002,GL003');
+check('Next lot id unchanged', E.nextLotId(roundTripped), E.nextLotId(seedData));
+check('Unit price survives round trip', E.purchaseUnitPrice(roundTripped.purchases[2]), E.purchaseUnitPrice(seedData.purchases[2]));
+check('Stock value survives round trip', E.stockByTrip(roundTripped).totals.remainingValue, E.stockByTrip(seedData).totals.remainingValue);
 check('Partner names preserved', [...new Set(roundTripped.draws.map((d) => d.partner))].sort().join(','), 'Fawas,Thambi,Wappa');
 check('Categories preserved', [...new Set(roundTripped.expenses.map((e) => e.category))].length, [...new Set(seedData.expenses.map((e) => e.category))].length);
 

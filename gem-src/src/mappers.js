@@ -45,9 +45,11 @@ export const COLLECTIONS = {
   },
   purchases: {
     table: 'gem_purchases',
+    // Unit price is absent by design — it is derived from amount / pieces.
     toDb: (r) => ({
       id: r.id,
       date: r.date || '',
+      lot_id: r.lotId || null,
       trip_id: r.tripId || null,
       pieces: num(r.pieces),
       funding_source: r.fundingSource || '',
@@ -57,6 +59,7 @@ export const COLLECTIONS = {
     fromDb: (r) => ({
       id: r.id,
       date: r.date || '',
+      lotId: r.lot_id || undefined,
       tripId: r.trip_id || '',
       pieces: r.pieces == null ? null : Number(r.pieces),
       fundingSource: r.funding_source || '',
