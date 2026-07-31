@@ -56,6 +56,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [booting, setBooting] = useState(true);
   const [needsMigration, setNeedsMigration] = useState(false);
+  const [initError, setInitError] = useState(null);
+  const [retryTick, setRetryTick] = useState(0);
   const data = useSyncExternalStore(subscribe, getState);
   const dbStatus = useSyncExternalStore(subscribeStatus, getStatus);
   const [tripFilter, setTripFilter] = useState(''); // '' = combined
@@ -70,26 +72,54 @@ export default function App() {
       .finally(() => setBooting(false));
   }, [keyReady]);
 
-  // Once signed in, load the ledgers out of Postgres.
+  // Once signed in, load the ledgers out of Postgres. A failure here (missing
+  // tables, RLS denial, network) must be shown, not swallowed — an infinite
+  // "Loading…" on a books app hides the one thing the owner needs to see.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+    setInitError(null);
     initStore(user.id)
       .then(({ empty }) => { if (!cancelled) setNeedsMigration(empty); })
-      .catch(() => {});
+      .catch((e) => { if (!cancelled) setInitError(String(e.message || e)); });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, retryTick]);
 
   async function handleSignOut() {
     await signOut();
     teardown();
     setUser(null);
     setNeedsMigration(false);
+    setInitError(null);
   }
 
   if (!keyReady) return <SetupKey onDone={() => setKeyReady(true)} />;
   if (booting) return <div className="login-wrap"><span className="subtle">Connecting…</span></div>;
   if (!user) return <Login onSuccess={setUser} />;
+  if (initError) {
+    return (
+      <div className="login-wrap">
+        <div className="login-box" style={{ maxWidth: 480 }}>
+          <div className="logo">GEM<span>·DASH</span></div>
+          <span className="subtle">Could not load the ledgers</span>
+          <div className="login-error" style={{ textAlign: 'left', margin: '14px 0', wordBreak: 'break-word' }}>
+            {initError}
+          </div>
+          <div className="subtle" style={{ textAlign: 'left', fontSize: 11, lineHeight: 1.6, marginBottom: 14 }}>
+            Common causes: the database tables haven't been created yet (run{' '}
+            <code>schema.sql</code> in the Supabase SQL Editor), or the anon key belongs to a
+            different Supabase project than the one the tables were created in.
+          </div>
+          <button className="btn" style={{ width: '100%' }} onClick={() => setRetryTick((t) => t + 1)}>
+            RETRY
+          </button>
+          <button className="btn ghost" style={{ width: '100%', marginTop: 8 }} onClick={handleSignOut}>
+            sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (!data) return <div className="login-wrap"><span className="subtle">Loading ledgers…</span></div>;
   if (needsMigration) {
     return <Migrate onDone={() => setNeedsMigration(false)} onSkip={() => setNeedsMigration(false)} />;
