@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { subscribe, getState, initStore, subscribeStatus, getStatus, getStatusDetail, teardown, updateSettings } from './store.js';
 import { currentUser, signOut } from './db.js';
 import { hasAnonKey } from './supabase.js';
@@ -61,6 +61,7 @@ export default function App() {
   const data = useSyncExternalStore(subscribe, getState);
   const dbStatus = useSyncExternalStore(subscribeStatus, getStatus);
   const [tripFilter, setTripFilter] = useState(''); // '' = combined
+  const tripDefaultApplied = useRef(false);
   const updateReady = useUpdateCheck();
 
   // Restore an existing session on reload.
@@ -85,12 +86,21 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user, retryTick]);
 
+  // Land on the in-progress trip once the ledgers arrive. Applied only on that
+  // first load, so it never overrides a filter the owner picked afterwards.
+  useEffect(() => {
+    if (tripDefaultApplied.current || !data?.trips?.length) return;
+    tripDefaultApplied.current = true;
+    setTripFilter(E.defaultTripFilter(data.trips));
+  }, [data]);
+
   async function handleSignOut() {
     await signOut();
     teardown();
     setUser(null);
     setNeedsMigration(false);
     setInitError(null);
+    tripDefaultApplied.current = false; // next sign-in picks its own default
   }
 
   if (!keyReady) return <SetupKey onDone={() => setKeyReady(true)} />;

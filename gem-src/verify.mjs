@@ -85,6 +85,13 @@ check('No false warning for trips without lots', E.lotStock(trip1Sales).warnings
 check('Seed sale net = amount when no commission', E.saleNet({ amount: 100000 }), 100000);
 check('Sale net applies commission %', E.saleNet({ amount: 100000, commissionPct: 10 }), 90000);
 
+console.log('— Default trip on load —');
+checkEq('Opens on the in-progress trip', E.defaultTripFilter(d.trips), 'trip2');
+checkEq('Follows a newly opened trip', E.defaultTripFilter([...d.trips, { id: 'trip3', name: 'Trip 3', status: 'Open' }]), 'trip3');
+checkEq('Falls back to newest trip when none open', E.defaultTripFilter(d.trips.map((t) => ({ ...t, status: 'Closed' }))), 'trip2');
+checkEq('Falls back to combined with no trips', E.defaultTripFilter([]), '');
+checkEq('Handles missing trips safely', E.defaultTripFilter(undefined), '');
+
 console.log('— Gem codes (Trip 2 gemstone sales, date order) —');
 function checkEq(label, actual, expected) {
   const ok = actual === expected;

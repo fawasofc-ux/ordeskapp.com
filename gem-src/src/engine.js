@@ -328,6 +328,17 @@ export function assignMissingLotIds(purchases) {
   };
 }
 
+// Which trip the dashboard opens on: the trip currently in progress, so the
+// first thing seen is live work rather than combined history. Pinned to status
+// rather than a hard-coded id, so opening Trip 3 later follows automatically.
+// Falls back to the newest trip, then to combined ('').
+export function defaultTripFilter(trips) {
+  if (!trips || !trips.length) return '';
+  const open = trips.filter((t) => t.status === 'Open');
+  const pick = open.length ? open[open.length - 1] : trips[trips.length - 1];
+  return pick?.id || '';
+}
+
 // True when a trip's loss is likely just unsold inventory (open trip, COGS > sales).
 export function isPaperLoss(data, tripId) {
   const trip = data.trips.find((t) => t.id === tripId);
