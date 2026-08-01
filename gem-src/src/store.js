@@ -7,7 +7,7 @@
 // surfaced, because a books app must never show a number it did not save.
 
 import * as db from './db.js';
-import { assignMissingLotIds } from './engine.js';
+import { assignMissingLotIds, assignMissingSaleLots } from './engine.js';
 
 const CACHE_KEY = 'gem-dashboard-cache-v2';
 
@@ -85,6 +85,7 @@ export async function initStore(userId) {
     setStatus('ready');
     startRealtime();
     await backfillLotIds();
+    await backfillSaleLots();
     return { empty: db.isEmpty(loaded) };
   } catch (e) {
     // No connection: fall back to the cached copy so the dashboard still works.
@@ -118,6 +119,26 @@ async function backfillLotIds() {
     state = previous; // leave them unassigned rather than half-written
     emit();
     setStatus('error', `Could not assign lot ids: ${e.message || e}`);
+  }
+}
+
+// Sales recorded before lots were tracked get classified once: the legacy
+// trip's gem sales take a lot (by description rule) and one piece of qty,
+// while non-gem rows are pinned to qty 0 so they never move stock.
+async function backfillSaleLots() {
+  const result = assignMissingSaleLots(state.sales || []);
+  if (!result) return;
+  const previous = state;
+  state = { ...state, sales: result.sales };
+  emit();
+  try {
+    for (const rowId of result.assigned.keys()) {
+      await db.updateRowDb('sales', rowId, result.sales.find((s) => s.id === rowId));
+    }
+  } catch (e) {
+    state = previous;
+    emit();
+    setStatus('error', `Could not assign sale lots: ${e.message || e}`);
   }
 }
 
@@ -234,7 +255,12 @@ export async function runMigration(legacyState, onProgress) {
   // Assign lot ids before upload so they land with the initial insert rather
   // than needing a second pass of updates afterwards.
   const withLots = assignMissingLotIds(legacyState.purchases || []);
-  const prepared = withLots ? { ...legacyState, purchases: withLots.purchases } : legacyState;
+  const withSaleLots = assignMissingSaleLots(legacyState.sales || []);
+  const prepared = {
+    ...legacyState,
+    ...(withLots ? { purchases: withLots.purchases } : {}),
+    ...(withSaleLots ? { sales: withSaleLots.sales } : {}),
+  };
   const counts = await db.migrateLocalState(prepared, ownerId, onProgress);
   await reloadFromDb();
   return counts;

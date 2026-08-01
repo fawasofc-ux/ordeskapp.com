@@ -53,6 +53,10 @@ check('Trip links intact', roundTripped.sales.filter((s) => s.tripId === 'trip2'
 check('Funding source preserved', roundTripped.purchases[2].fundingSource, seedData.purchases[2].fundingSource);
 check('Pieces preserved', roundTripped.purchases[2].pieces, seedData.purchases[2].pieces);
 check('Lot ids preserved', roundTripped.purchases.map((p) => p.lotId).join(','), 'GL001,GL002,GL003');
+check('Sale lot links preserved', roundTripped.sales.filter((s) => s.lotId === 'GL002').length, seedData.sales.filter((s) => s.lotId === 'GL002').length);
+check('Sale qty preserved', roundTripped.sales.reduce((t, s) => t + (Number(s.qty) || 0), 0), seedData.sales.reduce((t, s) => t + (Number(s.qty) || 0), 0));
+check('Per-lot remaining survives round trip', E.lotStock(roundTripped).totals.remaining, E.lotStock(seedData).totals.remaining);
+check('Expense lot column round-trips', COLLECTIONS.expenses.fromDb(COLLECTIONS.expenses.toDb({ id: 'e', amount: 1, lotId: 'GL003' })).lotId, 'GL003');
 check('Next lot id unchanged', E.nextLotId(roundTripped), E.nextLotId(seedData));
 check('Unit price survives round trip', E.purchaseUnitPrice(roundTripped.purchases[2]), E.purchaseUnitPrice(seedData.purchases[2]));
 check('Stock value survives round trip', E.stockByTrip(roundTripped).totals.remainingValue, E.stockByTrip(seedData).totals.remainingValue);

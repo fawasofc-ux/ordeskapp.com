@@ -136,6 +136,7 @@ export default function App() {
   const cats = E.expensesByCategory(data, scope);
   const recv = E.receivablesSplit(data, scope);
   const stock = E.stockByTrip(data);
+  const lotStock = E.lotStock(data);
   const returns = E.returnsSummary(data, scope);
   const paperLoss = E.openTripPaperLoss(data);
   const scopeLabel = scope ? data.trips.find((t) => t.id === scope)?.name : 'All trips';
@@ -256,7 +257,7 @@ export default function App() {
           </table>
         </div>
 
-        <SettingsPanel settings={data.settings} />
+        <SettingsPanel settings={data.settings} liq={liq} />
 
         <div className="panel span4">
           <h3>Expenses by Category — {scopeLabel}</h3>
@@ -311,20 +312,23 @@ export default function App() {
                   <td className="num">{r.avgCost ? fmt(r.remainingValue) : <span className="subtle">—</span>}</td>
                 </tr>
               ))}
-              {/* Lot-level detail: where each unit price comes from. */}
+              {/* Lot-level detail: each lot depletes at its own unit price. */}
               {stock.rows.flatMap((r) =>
-                r.lots.filter((l) => l.pieces > 0).map((l) => (
+                r.lots.map((l) => (
                   <tr key={l.id} className="lot-row">
                     <td>
                       <span className="gemcode">{l.lotId || '—'}</span>{' '}
                       <span className="subtle">{l.description}</span>
                     </td>
                     <td className="num">{fmt(l.pieces)}</td>
+                    <td className="num amb">{l.soldQty ? fmt(l.soldQty) : <span className="subtle">—</span>}</td>
                     <td className="num" />
-                    <td className="num" />
-                    <td className="num" />
+                    <td className={`num ${l.oversold ? 'neg' : 'cy'}`}>
+                      {fmt(l.remaining)}
+                      {l.oversold && ' ⚠'}
+                    </td>
                     <td className="num cy">{fmt(l.unitPrice)}</td>
-                    <td className="num">{fmt(l.amount)}</td>
+                    <td className="num">{fmt(l.value)}</td>
                   </tr>
                 )),
               )}
@@ -340,29 +344,15 @@ export default function App() {
             </tbody>
           </table>
           <div className="subtle" style={{ marginTop: 10 }}>
-            Each lot's <b>unit price</b> (amount ÷ qty, shown in Purchases) values the remaining stock.
-            Sales are not tied to a specific lot, so remaining pieces are valued at the weighted-average
-            unit price of that trip's lots. The P&L above stays lot-based and is unaffected.
-            {stock.totals.remainingValue > 0 && (
-              <>
-                {' '}Stock value from unit prices:{' '}
-                <span className="cy">LKR {fmt(stock.totals.remainingValue)}</span>
-                {Math.abs(stock.totals.remainingValue - liq.inventory) > 0.5 && (
-                  <>
-                    {' '}vs manual estimate <span className="amb">LKR {fmt(liq.inventory)}</span>{' '}
-                    <button
-                      className="btn ghost icon"
-                      onClick={() =>
-                        updateSettings({ inventoryEstimate: Math.round(stock.totals.remainingValue * 100) / 100 })
-                      }
-                      title="Set the manual inventory estimate to the value computed from unit prices"
-                    >
-                      use computed
-                    </button>
-                  </>
-                )}
-              </>
+            Each sale names the lot its piece came from, so stock leaves that lot at{' '}
+            <b>that lot's own unit price</b> (amount ÷ qty, shown in Purchases) — no averaging.
+            Inventory on hand is{' '}
+            {liq.inventoryMode === 'auto' ? (
+              <span className="pos">calculated from this automatically</span>
+            ) : (
+              <span className="amb">set manually — the lots value at LKR {fmt(liq.inventoryAuto)}</span>
             )}
+            . The P&L above stays lot-based and is unaffected.
             {returns.count > 0 && (
               <>
                 {' '}Returned pieces come back into stock and earn nothing —{' '}
@@ -373,6 +363,35 @@ export default function App() {
               </>
             )}
           </div>
+          {/* Anything that would make stock quietly wrong is named, not hidden. */}
+          {(lotStock.warnings.unassigned.count > 0 ||
+            lotStock.warnings.missingQty > 0 ||
+            lotStock.warnings.unknownLot > 0 ||
+            lotStock.warnings.oversold > 0) && (
+            <div className="badge warn" style={{ display: 'block', marginTop: 10, lineHeight: 1.7 }}>
+              {lotStock.warnings.unassigned.count > 0 && (
+                <div>
+                  {lotStock.warnings.unassigned.count} sale(s) move {fmt(lotStock.warnings.unassigned.qty)} piece(s)
+                  but name no gem lot — they do not reduce any lot's stock.
+                </div>
+              )}
+              {lotStock.warnings.missingQty > 0 && (
+                <div>
+                  {lotStock.warnings.missingQty} sale(s) name a lot but have no qty — they deduct nothing.
+                </div>
+              )}
+              {lotStock.warnings.unknownLot > 0 && (
+                <div>
+                  {lotStock.warnings.unknownLot} sale(s) reference a lot id that no purchase defines.
+                </div>
+              )}
+              {lotStock.warnings.oversold > 0 && (
+                <div>
+                  {lotStock.warnings.oversold} lot(s) are oversold — more pieces sold than the lot holds.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
 

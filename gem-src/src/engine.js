@@ -47,11 +47,25 @@ export function cashReconciliation(data) {
   };
 }
 
+// Inventory is normally derived from the lots (remaining pieces x unit price)
+// and updates itself as gems sell. The manual figure remains available as an
+// override for stock the lots do not describe.
 export function liquidity(data) {
   const receivables = sumNet(data.sales.filter((s) => s.status === 'Pending'));
-  const inventory = Number(data.settings.inventoryEstimate) || 0;
+  const manual = Number(data.settings.inventoryEstimate) || 0;
+  const auto = lotStock(data).totals.value;
+  const mode = data.settings.inventoryMode === 'manual' ? 'manual' : 'auto';
+  const inventory = mode === 'manual' ? manual : auto;
   const actualBank = Number(data.settings.actualBank) || 0;
-  return { receivables, inventory, actualBank, businessValue: actualBank + receivables + inventory };
+  return {
+    receivables,
+    inventory,
+    inventoryMode: mode,
+    inventoryAuto: auto,
+    inventoryManual: manual,
+    actualBank,
+    businessValue: actualBank + receivables + inventory,
+  };
 }
 
 export function capitalOwed(data) {
@@ -97,38 +111,103 @@ export function purchaseUnitPrice(p) {
   return pieces > 0 ? (Number(p?.amount) || 0) / pieces : 0;
 }
 
-// Quantity accounting for gem stock. Purchases arrive as a lot (a total cost for
-// N pieces), so we count pieces in vs pieces out and value the remainder from
-// the lots' unit prices. Sales are not tied to a specific lot, so the trip's
-// remaining pieces are valued at the weighted-average unit price of its lots —
-// which is the honest figure when you cannot say which lot a sold piece left.
+// Per-lot stock. Each sale names the lot it came out of, so a sold piece is
+// deducted from that specific lot at that lot's own unit price — no averaging.
+//
+// Two things are reported rather than quietly absorbed, because either would
+// otherwise make stock silently wrong: sales that move pieces but name no lot,
+// and sales that name a lot but carry no qty (so they deduct nothing).
+export function lotStock(data) {
+  const live = (data.sales || []).filter((s) => !s.returned);
+  const qtyOf = (s) => Number(s.qty) || 0;
+
+  const lots = (data.purchases || [])
+    .filter((p) => (Number(p.pieces) || 0) > 0)
+    .map((p) => {
+      const pieces = Number(p.pieces) || 0;
+      const unitPrice = purchaseUnitPrice(p);
+      const mine = p.lotId ? live.filter((s) => s.lotId === p.lotId) : [];
+      const soldQty = mine.reduce((t, s) => t + qtyOf(s), 0);
+      const remaining = pieces - soldQty;
+      return {
+        id: p.id,
+        lotId: p.lotId || '',
+        tripId: p.tripId,
+        date: p.date || '',
+        description: p.description || '',
+        pieces,
+        amount: Number(p.amount) || 0,
+        unitPrice,
+        soldQty,
+        remaining,
+        // A lot cannot hold negative stock; flag it instead of hiding it.
+        oversold: remaining < 0,
+        value: remaining * unitPrice,
+      };
+    })
+    .sort((a, b) => String(a.lotId).localeCompare(String(b.lotId)));
+
+  const totals = lots.reduce(
+    (a, l) => ({
+      pieces: a.pieces + l.pieces,
+      soldQty: a.soldQty + l.soldQty,
+      remaining: a.remaining + l.remaining,
+      cost: a.cost + l.amount,
+      value: a.value + l.value,
+    }),
+    { pieces: 0, soldQty: 0, remaining: 0, cost: 0, value: 0 },
+  );
+
+  const knownLots = new Set(lots.map((l) => l.lotId).filter(Boolean));
+  const unassigned = live.filter((s) => qtyOf(s) > 0 && !s.lotId);
+  const unknownLot = live.filter((s) => s.lotId && !knownLots.has(s.lotId));
+  const missingQty = live.filter((s) => s.lotId && qtyOf(s) === 0);
+
+  return {
+    lots,
+    totals,
+    warnings: {
+      unassigned: { count: unassigned.length, qty: unassigned.reduce((t, s) => t + qtyOf(s), 0) },
+      missingQty: missingQty.length,
+      unknownLot: unknownLot.length,
+      oversold: lots.filter((l) => l.oversold).length,
+    },
+  };
+}
+
+// Lots offered in the sale/expense pickers — only lots that actually hold
+// pieces, which naturally excludes the Trip 1 record (it has no piece count).
+export function lotOptions(data) {
+  return lotStock(data).lots.map((l) => ({
+    lotId: l.lotId,
+    tripId: l.tripId,
+    pieces: l.pieces,
+    remaining: l.remaining,
+    unitPrice: l.unitPrice,
+  }));
+}
+
+// Quantity accounting rolled up per trip, now sourced from the lots so the
+// trip figure and the lot figures can never disagree.
 // Money-side P&L stays lot-based and unchanged; this valuation is an estimate.
 export function stockByTrip(data) {
   const qty = (rows) => rows.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+  const allLots = lotStock(data).lots;
   const rows = data.trips.map((t) => {
     const purchases = data.purchases.filter((p) => p.tripId === t.id);
     const bought = purchases.reduce((s, p) => s + (Number(p.pieces) || 0), 0);
-    const lotCost = purchases.reduce((s, p) => s + (Number(p.amount) || 0), 0);
     const tripSales = data.sales.filter((s) => s.tripId === t.id);
     // Returned pieces are back on the shelf, so they do not count as sold.
     const sold = qty(tripSales.filter((s) => !s.returned));
     const returned = qty(tripSales.filter((s) => s.returned));
     const remaining = bought - sold;
-    // Weighted average of the lots' unit prices — identical to lotCost/bought,
-    // but expressed as what it is so the stock value traces back to unit price.
+    // Valued from the lots themselves, each at its own unit price.
+    const lots = allLots.filter((l) => l.tripId === t.id);
+    const remainingValue = lots.reduce((s, l) => s + l.value, 0);
     const avgCost = bought > 0
       ? purchases.reduce((s, p) => s + purchaseUnitPrice(p) * (Number(p.pieces) || 0), 0) / bought
       : 0;
-    const lots = purchases.map((p) => ({
-      id: p.id,
-      lotId: p.lotId || '',
-      date: p.date || '',
-      description: p.description || '',
-      pieces: Number(p.pieces) || 0,
-      amount: Number(p.amount) || 0,
-      unitPrice: purchaseUnitPrice(p),
-    }));
-    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue: avgCost * remaining, lots };
+    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue, lots };
   });
   const totals = rows.reduce(
     (a, r) => ({
@@ -177,6 +256,47 @@ export function nextLotId(data, prefix = LOT_ID_PREFIX) {
     return m ? Math.max(max, Number(m[1])) : max;
   }, 0);
   return `${prefix}${String(highest + 1).padStart(3, '0')}`;
+}
+
+// One-time classification of sales recorded before lots were tracked.
+// Rules are matched in order and the first hit wins; anything unmatched falls
+// back. Adding a future lot means adding a rule here — new sales pick their
+// lot from the dropdown, so this only ever covers the legacy rows.
+export const LEGACY_SALE_LOT_RULES = [
+  { test: /\bNL\b/i, lotId: 'GL003' },
+];
+export const LEGACY_SALE_LOT_FALLBACK = 'GL002';
+export const LEGACY_SALE_LOT_TRIP = 'trip2';
+// Non-gem goods never come out of a gem lot.
+const NON_GEM = /sarong/i;
+
+// Backfills lotId (and qty, which defaults to one piece per gem sale) on the
+// legacy trip's sales. Returns null when there is nothing to do.
+export function assignMissingSaleLots(sales, {
+  tripId = LEGACY_SALE_LOT_TRIP,
+  rules = LEGACY_SALE_LOT_RULES,
+  fallback = LEGACY_SALE_LOT_FALLBACK,
+  defaultQty = 1,
+} = {}) {
+  const assigned = new Map();
+  const next = sales.map((s) => {
+    if (s.tripId !== tripId) return s;
+    if (NON_GEM.test(s.description || '')) {
+      // Sarong is not gem stock: pin qty to 0 so it can never move a lot.
+      if (Number(s.qty) === 0 && !s.lotId) return s;
+      assigned.set(s.id, { qty: 0 });
+      return { ...s, qty: 0, lotId: undefined };
+    }
+    const patch = {};
+    if (!s.lotId) {
+      patch.lotId = (rules.find((r) => r.test.test(s.description || '')) || {}).lotId || fallback;
+    }
+    if (Number(s.qty) === 0 || s.qty == null) patch.qty = defaultQty;
+    if (!Object.keys(patch).length) return s;
+    assigned.set(s.id, patch);
+    return { ...s, ...patch };
+  });
+  return assigned.size ? { sales: next, assigned } : null;
 }
 
 // Assigns lot ids to purchases missing one, oldest first, continuing from the

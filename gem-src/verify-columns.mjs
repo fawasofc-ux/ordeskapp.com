@@ -34,6 +34,7 @@ const sales = {
     { key: 'description', type: 'text' },
     { key: 'customer', type: 'text' },
     { key: 'tripId', type: 'select' },
+    { key: 'lotId', type: 'select', optional: true },
     { key: 'status', type: 'select' },
     { key: 'commissionPct', type: 'number', noTotal: true },
     { key: 'qty', type: 'number' },
@@ -51,9 +52,9 @@ checkEq(
 );
 const sCols = buildColumns(sales).map((c) => c.key);
 checkEq(
-  'Sales: net appended last (no `after` declared)',
+  'Sales: lot id after Trip, net appended last',
   sCols.join(','),
-  'date,gemCode,description,customer,tripId,status,commissionPct,qty,amount,net',
+  'date,gemCode,description,customer,tripId,lotId,status,commissionPct,qty,amount,net',
 );
 
 console.log('— TOTAL row alignment —');

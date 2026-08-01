@@ -27,6 +27,7 @@ export const COLLECTIONS = {
       amount: num(r.amount) ?? 0,
       returned: !!r.returned,
       return_date: r.returnDate || null,
+      lot_id: r.lotId || null,
     }),
     fromDb: (r) => ({
       id: r.id,
@@ -41,6 +42,7 @@ export const COLLECTIONS = {
       amount: Number(r.amount) || 0,
       ...(r.returned ? { returned: true } : {}),
       ...(r.return_date ? { returnDate: r.return_date } : {}),
+      lotId: r.lot_id || undefined,
     }),
   },
   purchases: {
@@ -75,6 +77,7 @@ export const COLLECTIONS = {
       description: r.description || '',
       category: r.category || '',
       trip_id: r.tripId || null,
+      lot_id: r.lotId || null,
       amount: num(r.amount) ?? 0,
     }),
     fromDb: (r) => ({
@@ -83,6 +86,7 @@ export const COLLECTIONS = {
       description: r.description || '',
       category: r.category || '',
       tripId: r.trip_id || '',
+      lotId: r.lot_id || undefined,
       amount: Number(r.amount) || 0,
     }),
   },

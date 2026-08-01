@@ -2,12 +2,23 @@ import React, { useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
-import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice } from '../engine.js';
+import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice, lotOptions } from '../engine.js';
 import { buildColumns, totalColumns, firstTotalIndex } from '../columns.js';
+
+// Ledgers that carry a gem lot, and so offer the lot filter.
+const LOT_TABS = new Set(['sales', 'purchases', 'expenses']);
 
 // Schema-driven ledgers: one table + one form implementation for all five.
 function schemas(data) {
   const tripOpts = data.trips.map((t) => ({ value: t.id, label: t.name }));
+  // Lots that hold pieces, labelled with what is left and what each piece cost
+  // so the choice is informed at the point of sale.
+  const lots = lotOptions(data);
+  const lotOpts = lots.map((l) => ({
+    value: l.lotId,
+    label: `${l.lotId} · ${fmt(l.remaining)}/${fmt(l.pieces)} pcs left · ${fmt(l.unitPrice)}/pc`,
+  }));
+  const lotOptsOptional = [{ value: '', label: '— no lot —' }, ...lotOpts];
   return {
     sales: {
       label: 'Sales',
@@ -17,9 +28,10 @@ function schemas(data) {
         { key: 'description', label: 'Description', type: 'text', full: true },
         { key: 'customer', label: 'Customer', type: 'text' },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
+        { key: 'lotId', label: 'Gem Lot ID', type: 'select', options: lotOptsOptional, optional: true, hint: 'which lot the piece came out of — its unit price leaves stock' },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'Received', label: 'Received' }, { value: 'Pending', label: 'Pending' }] },
         { key: 'commissionPct', label: 'Commission %', type: 'number', noTotal: true, hint: '% deducted from the sale (0 for already-net entries)' },
-        { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — draws down trip stock' },
+        { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — deducted from the lot above' },
         { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'gross sale before commission' },
       ],
       // Net is always derived from amount and commission %, never stored.
@@ -57,6 +69,7 @@ function schemas(data) {
         { key: 'description', label: 'Description', type: 'text', full: true },
         { key: 'category', label: 'Category', type: 'select', options: data.settings.categories.map((c) => ({ value: c, label: c })), allowNew: addCategory },
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
+        { key: 'lotId', label: 'Gem Lot ID', type: 'select', options: lotOptsOptional, optional: true, hint: 'optional — tag the lot this cost belongs to' },
         { key: 'amount', label: 'Amount (LKR)', type: 'number' },
       ],
     },
@@ -122,8 +135,8 @@ function RowForm({ schema, initial, onSave, onCancel }) {
             <label>{f.label}</label>
             {f.type === 'select' ? (
               <>
-                <select value={form[f.key]} onChange={(e) => set(f.key, e.target.value)} required>
-                  <option value="" disabled>Select…</option>
+                <select value={form[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)} required={!f.optional}>
+                  {!f.optional && <option value="" disabled>Select…</option>}
                   {f.options.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
@@ -202,10 +215,19 @@ export default function Ledgers({ data, tripFilter }) {
   const [editing, setEditing] = useState(null); // { row } or { row: null } for add
   const [sort, setSort] = useState({ key: 'date', dir: -1 });
   const [statusFilter, setStatusFilter] = useState('');
+  const [lotFilter, setLotFilter] = useState('');
   const [search, setSearch] = useState('');
 
   const allSchemas = schemas(data);
   const schema = allSchemas[tab];
+  // Every lot ever issued, so a filter still finds rows on a depleted lot.
+  const lotFilterOptions = useMemo(
+    () =>
+      [...new Set(data.purchases.map((p) => p.lotId).filter(Boolean))]
+        .sort()
+        .map((lotId) => ({ lotId })),
+    [data.purchases],
+  );
   const tripName = (id) => data.trips.find((t) => t.id === id)?.name || '—';
 
   const rows = useMemo(() => {
@@ -215,6 +237,12 @@ export default function Ledgers({ data, tripFilter }) {
       if (statusFilter === '__returned') out = out.filter((r) => r.returned);
       else if (statusFilter === '__active') out = out.filter((r) => !r.returned);
       else out = out.filter((r) => r.status === statusFilter && !r.returned);
+    }
+    // Lot filter — the point of the lot ids: see one lot's whole story.
+    if (LOT_TABS.has(tab) && lotFilter) {
+      out = lotFilter === '__none'
+        ? out.filter((r) => !r.lotId)
+        : out.filter((r) => r.lotId === lotFilter);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -228,7 +256,7 @@ export default function Ledgers({ data, tripFilter }) {
       return String(va).localeCompare(String(vb)) * sort.dir;
     });
     return out;
-  }, [data, tab, tripFilter, statusFilter, search, sort]);
+  }, [data, tab, tripFilter, statusFilter, lotFilter, search, sort]);
 
   function onDelete(row) {
     if (tab === 'trips') {
@@ -301,6 +329,15 @@ export default function Ledgers({ data, tripFilter }) {
             <option value="__active">Hide returned</option>
           </select>
         )}
+        {LOT_TABS.has(tab) && (
+          <select value={lotFilter} onChange={(e) => setLotFilter(e.target.value)} title="Filter by gem lot">
+            <option value="">All gem lots</option>
+            {lotFilterOptions.map((l) => (
+              <option key={l.lotId} value={l.lotId}>{l.lotId}</option>
+            ))}
+            <option value="__none">— no lot —</option>
+          </select>
+        )}
         <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 200 }} />
         <div className="spacer" />
         <button className="btn" onClick={() => setEditing({ row: null })}>＋ Add {schema.label.replace(/s$/, '')}</button>
@@ -322,7 +359,7 @@ export default function Ledgers({ data, tripFilter }) {
                   let content;
                   if (f.compute) {
                     content = <span className={f.accent || ''}>{fmt(f.compute(r))}</span>;
-                  } else if (f.type === 'gemcode') {
+                  } else if (f.type === 'gemcode' || f.key === 'lotId') {
                     content = r[f.key] ? <span className="gemcode">{r[f.key]}</span> : <span className="subtle">—</span>;
                   } else if (f.key === 'tripId') {
                     content = tripName(r.tripId);

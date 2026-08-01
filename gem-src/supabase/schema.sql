@@ -46,8 +46,11 @@ create table if not exists public.gem_sales (
   amount         numeric not null default 0,
   returned       boolean not null default false,
   return_date    text,
+  lot_id         text,
   updated_at     timestamptz not null default now()
 );
+
+alter table public.gem_sales add column if not exists lot_id text;
 
 -- Unit price is deliberately NOT a column: it is amount / pieces, derived in
 -- the app so it can never drift out of step with the figures it comes from.
@@ -74,9 +77,12 @@ create table if not exists public.gem_expenses (
   description text,
   category    text,
   trip_id     text,
+  lot_id      text,
   amount      numeric not null default 0,
   updated_at  timestamptz not null default now()
 );
+
+alter table public.gem_expenses add column if not exists lot_id text;
 
 create table if not exists public.gem_draws (
   id          text primary key,
