@@ -346,7 +346,8 @@ export default function App() {
           <div className="subtle" style={{ marginTop: 10 }}>
             Each sale names the lot its piece came from, so stock leaves that lot at{' '}
             <b>that lot's own unit price</b> (amount ÷ qty, shown in Purchases) — no averaging.
-            Inventory on hand is{' '}
+            Only trips holding piece-tracked lots appear here; Trip 1 was bought as one untracked
+            lot, so it carries no piece stock and is excluded. Inventory on hand is{' '}
             {liq.inventoryMode === 'auto' ? (
               <span className="pos">calculated from this automatically</span>
             ) : (

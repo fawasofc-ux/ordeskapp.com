@@ -70,6 +70,17 @@ check('Trip 2 pieces bought', s2.bought, 100);
 check('Trip 2 pieces sold (6 gem sales x 1)', s2.sold, 6);
 check('Trip 2 pieces remaining', s2.remaining, 94);
 check('Combined pieces bought', stock.totals.bought, 100);
+// Trip 1 holds no piece-tracked lot, so it must not appear at all — counting
+// its sales here previously reported negative stock and skewed the combined
+// remaining (the -5 / 79 seen in production).
+checkEq('Trips without lots are excluded', stock.rows.length, 1);
+checkEq('Only Trip 2 is stock-tracked', stock.rows[0].trip.id, 'trip2');
+const trip1Sales = { ...d, sales: d.sales.map((s) => (s.tripId === 'trip1' ? { ...s, qty: 2 } : s)) };
+const st1 = E.stockByTrip(trip1Sales);
+checkEq('Trip 1 sales with qty never create negative stock', st1.rows.some((r) => r.remaining < 0), false);
+check('Combined remaining ignores untracked trips', st1.totals.remaining, 94);
+check('Combined sold ignores untracked trips', st1.totals.sold, 6);
+check('No false warning for trips without lots', E.lotStock(trip1Sales).warnings.unassigned.count, 0);
 // Commission defaults to 0 on all seed sales → net === gross amount.
 check('Seed sale net = amount when no commission', E.saleNet({ amount: 100000 }), 100000);
 check('Sale net applies commission %', E.saleNet({ amount: 100000, commissionPct: 10 }), 90000);

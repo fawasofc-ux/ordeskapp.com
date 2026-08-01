@@ -159,7 +159,10 @@ export function lotStock(data) {
   );
 
   const knownLots = new Set(lots.map((l) => l.lotId).filter(Boolean));
-  const unassigned = live.filter((s) => qtyOf(s) > 0 && !s.lotId);
+  // Only trips that actually hold lots take part in stock accounting, so a
+  // sale in a trip with no lots (Trip 1) is outside it rather than an error.
+  const lotTrips = new Set(lots.map((l) => l.tripId));
+  const unassigned = live.filter((s) => qtyOf(s) > 0 && !s.lotId && lotTrips.has(s.tripId));
   const unknownLot = live.filter((s) => s.lotId && !knownLots.has(s.lotId));
   const missingQty = live.filter((s) => s.lotId && qtyOf(s) === 0);
 
@@ -193,22 +196,26 @@ export function lotOptions(data) {
 export function stockByTrip(data) {
   const qty = (rows) => rows.reduce((s, x) => s + (Number(x.qty) || 0), 0);
   const allLots = lotStock(data).lots;
-  const rows = data.trips.map((t) => {
-    const purchases = data.purchases.filter((p) => p.tripId === t.id);
-    const bought = purchases.reduce((s, p) => s + (Number(p.pieces) || 0), 0);
-    const tripSales = data.sales.filter((s) => s.tripId === t.id);
-    // Returned pieces are back on the shelf, so they do not count as sold.
-    const sold = qty(tripSales.filter((s) => !s.returned));
-    const returned = qty(tripSales.filter((s) => s.returned));
-    const remaining = bought - sold;
-    // Valued from the lots themselves, each at its own unit price.
-    const lots = allLots.filter((l) => l.tripId === t.id);
-    const remainingValue = lots.reduce((s, l) => s + l.value, 0);
-    const avgCost = bought > 0
-      ? purchases.reduce((s, p) => s + purchaseUnitPrice(p) * (Number(p.pieces) || 0), 0) / bought
-      : 0;
-    return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue, lots };
-  });
+  // Stock is lot accounting, so a trip only appears once it holds a lot with
+  // pieces. Trip 1 was bought as a single untracked lot, so counting its sales
+  // here would report negative stock for gems that were never piece-tracked.
+  const rows = data.trips
+    .filter((t) => allLots.some((l) => l.tripId === t.id))
+    .map((t) => {
+      const lots = allLots.filter((l) => l.tripId === t.id);
+      const lotIds = new Set(lots.map((l) => l.lotId));
+      // Every figure below is summed from the lots, so the trip line and the
+      // lot lines under it can never disagree.
+      const bought = lots.reduce((s, l) => s + l.pieces, 0);
+      const sold = lots.reduce((s, l) => s + l.soldQty, 0);
+      const remaining = lots.reduce((s, l) => s + l.remaining, 0);
+      const remainingValue = lots.reduce((s, l) => s + l.value, 0);
+      const returned = qty(data.sales.filter((s) => s.returned && lotIds.has(s.lotId)));
+      const avgCost = bought > 0
+        ? lots.reduce((s, l) => s + l.unitPrice * l.pieces, 0) / bought
+        : 0;
+      return { trip: t, bought, sold, returned, remaining, avgCost, remainingValue, lots };
+    });
   const totals = rows.reduce(
     (a, r) => ({
       bought: a.bought + r.bought,
