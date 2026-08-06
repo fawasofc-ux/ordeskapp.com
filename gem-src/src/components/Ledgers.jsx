@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
-import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice, lotOptions } from '../engine.js';
+import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice, lotOptions, sinceSold } from '../engine.js';
 import { buildColumns, totalColumns, firstTotalIndex } from '../columns.js';
 
 // Ledgers that carry a gem lot, and so offer the lot filter.
@@ -34,8 +34,23 @@ function schemas(data) {
         { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — deducted from the lot above' },
         { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'gross sale before commission' },
       ],
-      // Net is always derived from amount and commission %, never stored.
-      computed: [{ key: 'net', label: 'Net (LKR)', accent: 'pos', compute: saleNet }],
+      // Both derived, never stored. Since Sold ages against today's date, so
+      // `compute` returns the day count (used for sorting) while `render`
+      // produces the human label and its colour.
+      computed: [
+        {
+          key: 'sinceSold',
+          label: 'Since Sold',
+          after: 'date',
+          noTotal: true,
+          compute: (r) => sinceSold(r.date).sortKey,
+          render: (r) => {
+            const s = sinceSold(r.date);
+            return <span className={s.tone} title={s.valid && !s.future ? `${s.totalDays} days` : undefined}>{s.label}</span>;
+          },
+        },
+        { key: 'net', label: 'Net (LKR)', accent: 'pos', compute: saleNet },
+      ],
       defaults: { status: 'Pending', commissionPct: 0, qty: 1, gemCode: nextGemCode(data) },
     },
     purchases: {
@@ -218,6 +233,14 @@ export default function Ledgers({ data, tripFilter }) {
   const [lotFilter, setLotFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  // "Since Sold" is measured against today, so a tab left open overnight would
+  // otherwise keep showing yesterday's ages. An hourly tick re-renders it.
+  const [, setDayTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setDayTick((n) => n + 1), 3600000);
+    return () => clearInterval(t);
+  }, []);
+
   const allSchemas = schemas(data);
   const schema = allSchemas[tab];
   // Every lot ever issued, so a filter still finds rows on a depleted lot.
@@ -347,7 +370,7 @@ export default function Ledgers({ data, tripFilter }) {
         <table>
           <thead>
             <tr>
-              {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number' || !!f.compute))}
+              {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number' || (!!f.compute && !f.render)))}
               <th style={{ width: 110 }}></th>
             </tr>
           </thead>
@@ -355,9 +378,13 @@ export default function Ledgers({ data, tripFilter }) {
             {rows.map((r) => (
               <tr key={r.id} className={r.returned ? 'returned' : ''}>
                 {cols.map((f) => {
-                  const numeric = f.type === 'number' || !!f.compute;
+                  // A computed column with its own renderer is a label, not a
+                  // figure, so it is not right-aligned like the money columns.
+                  const numeric = f.type === 'number' || (!!f.compute && !f.render);
                   let content;
-                  if (f.compute) {
+                  if (f.render) {
+                    content = f.render(r);
+                  } else if (f.compute) {
                     content = <span className={f.accent || ''}>{fmt(f.compute(r))}</span>;
                   } else if (f.type === 'gemcode' || f.key === 'lotId') {
                     content = r[f.key] ? <span className="gemcode">{r[f.key]}</span> : <span className="subtle">—</span>;

@@ -85,6 +85,41 @@ check('No false warning for trips without lots', E.lotStock(trip1Sales).warnings
 check('Seed sale net = amount when no commission', E.saleNet({ amount: 100000 }), 100000);
 check('Sale net applies commission %', E.saleNet({ amount: 100000, commissionPct: 10 }), 90000);
 
+console.log('— Since Sold (age of a sale) —');
+// Fixed "now" so these never drift with the real clock.
+const NOW = new Date(2026, 7, 1); // 2026-08-01, local
+const since = (d) => E.sinceSold(d, NOW);
+checkEq('Same day', since('2026-08-01').label, '0d');
+checkEq('Under a week shows days', since('2026-07-27').label, '5d');
+checkEq('Six days is still days', since('2026-07-26').label, '6d');
+checkEq('Seven days becomes a week', since('2026-07-25').label, '1w');
+checkEq('Weeks and days', since('2026-07-20').label, '1w 5d');
+checkEq('Just under a month', since('2026-07-03').label, '4w 1d');
+checkEq('Exactly one month', since('2026-07-01').label, '1m');
+checkEq('Month and days', since('2026-06-29').label, '1m 3d'); // 29 Jun +1m = 29 Jul, then 3 days
+checkEq('Month and 2 days', since('2026-06-30').label, '1m 2d'); // 30 Jun +1m = 30 Jul, then 2 days
+checkEq('Month, weeks and days', since('2026-06-25').label, '1m 1w');
+checkEq('Two months with weeks and days', since('2026-05-13').label, '2m 2w 5d');
+// Month arithmetic must clamp at month ends, not overflow into the next month.
+checkEq('31 Jan -> 28 Feb is one month', E.sinceSold('2026-01-31', new Date(2026, 1, 28)).label, '1m');
+checkEq('31 Jan -> 27 Feb is under a month', E.sinceSold('2026-01-31', new Date(2026, 1, 27)).months, 0);
+checkEq('31 Mar -> 30 Apr is one month', E.sinceSold('2026-03-31', new Date(2026, 3, 30)).label, '1m');
+// Colour escalates with age.
+checkEq('Under a month is green', since('2026-07-20').tone, 'pos');
+checkEq('One month is amber', since('2026-06-29').tone, 'amb');
+checkEq('Two months is red', since('2026-05-13').tone, 'neg');
+checkEq('Almost a month is still green', since('2026-07-03').tone, 'pos');
+// Bad or missing dates must not crash or fake an age.
+checkEq('Missing date', since('').label, '—');
+checkEq('Missing date has no colour', since('').tone, '');
+checkEq('Undefined date', since(undefined).valid, false);
+checkEq('Junk date', since('not a date').valid, false);
+checkEq('Future date is flagged, not negative', since('2026-08-04').label, 'in 3d');
+checkEq('Future date is amber', since('2026-08-04').tone, 'amb');
+// Sorting must order by real elapsed days, not by the label text.
+const ages = ['2026-05-13', '2026-07-25', '2026-08-01'].map((d) => since(d).sortKey);
+checkEq('Sort key ascends with recency', JSON.stringify([...ages].sort((a, b) => a - b)), JSON.stringify([0, 7, 80]));
+
 console.log('— Default trip on load —');
 checkEq('Opens on the in-progress trip', E.defaultTripFilter(d.trips), 'trip2');
 checkEq('Follows a newly opened trip', E.defaultTripFilter([...d.trips, { id: 'trip3', name: 'Trip 3', status: 'Open' }]), 'trip3');

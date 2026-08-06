@@ -4,7 +4,7 @@
 //   node verify-columns.mjs
 
 import { buildColumns, totalColumns, firstTotalIndex } from './src/columns.js';
-import { purchaseUnitPrice, saleNet } from './src/engine.js';
+import { purchaseUnitPrice, saleNet, sinceSold } from './src/engine.js';
 
 let failures = 0;
 function checkEq(label, actual, expected) {
@@ -40,7 +40,10 @@ const sales = {
     { key: 'qty', type: 'number' },
     { key: 'amount', type: 'number' },
   ],
-  computed: [{ key: 'net', compute: saleNet }],
+  computed: [
+    { key: 'sinceSold', after: 'date', noTotal: true, compute: (r) => sinceSold(r.date).sortKey, render: () => null },
+    { key: 'net', compute: saleNet },
+  ],
 };
 
 console.log('— Column order —');
@@ -52,10 +55,11 @@ checkEq(
 );
 const sCols = buildColumns(sales).map((c) => c.key);
 checkEq(
-  'Sales: lot id after Trip, net appended last',
+  'Sales: since-sold after Date, lot id after Trip, net appended last',
   sCols.join(','),
-  'date,gemCode,description,customer,tripId,lotId,status,commissionPct,qty,amount,net',
+  'date,sinceSold,gemCode,description,customer,tripId,lotId,status,commissionPct,qty,amount,net',
 );
+checkEq('Sales: since-sold is never summed', totalColumns(buildColumns(sales)).some((c) => c.key === 'sinceSold'), false);
 
 console.log('— TOTAL row alignment —');
 // Every column from firstTotalIndex on gets its own cell; the label spans the

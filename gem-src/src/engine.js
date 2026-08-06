@@ -328,6 +328,69 @@ export function assignMissingLotIds(purchases) {
   };
 }
 
+// ---- age of a sale ----
+//
+// Dates are stored as plain YYYY-MM-DD, so they are parsed as LOCAL midnight.
+// Using new Date('2026-05-13') would parse as UTC and could report the wrong
+// day for anyone east or west of UTC.
+function parseYMD(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '').trim());
+  if (!m) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+// Whole days between two dates, ignoring clock time and DST shifts.
+const dayIndex = (d) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000;
+
+// Adding months must clamp to the end of the target month: 31 Jan + 1 month is
+// 28 Feb, not 3 March, which is what a naive setMonth would give.
+function addMonths(d, n) {
+  const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(d.getDate(), lastDay));
+}
+
+// How long since a sale, in calendar months / weeks / days:
+//   under a week  -> 5d
+//   under a month -> 1w 3d
+//   beyond        -> 1m 2d, 2m 3w 1d
+// Tone escalates as the money stays uncollected: green under a month, amber
+// once a month has passed, red from two months.
+export function sinceSold(dateStr, now = new Date()) {
+  const from = parseYMD(dateStr);
+  if (!from) return { valid: false, label: '—', tone: '', sortKey: -1 };
+
+  const totalDays = dayIndex(now) - dayIndex(from);
+  if (totalDays < 0) {
+    // A sale dated in the future is a data-entry slip, not an age.
+    return { valid: true, future: true, totalDays, label: `in ${-totalDays}d`, tone: 'amb', sortKey: totalDays };
+  }
+
+  let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth());
+  if (months > 0 && addMonths(from, months) > now) months -= 1;
+  if (months < 0) months = 0;
+
+  const restDays = dayIndex(now) - dayIndex(addMonths(from, months));
+  const weeks = Math.floor(restDays / 7);
+  const days = restDays % 7;
+
+  let label;
+  if (months === 0 && totalDays < 7) {
+    label = `${totalDays}d`;
+  } else if (months === 0) {
+    label = days ? `${weeks}w ${days}d` : `${weeks}w`;
+  } else {
+    const parts = [`${months}m`];
+    if (weeks) parts.push(`${weeks}w`);
+    if (days) parts.push(`${days}d`);
+    label = parts.join(' ');
+  }
+
+  const tone = months >= 2 ? 'neg' : months >= 1 ? 'amb' : 'pos';
+  return { valid: true, totalDays, months, weeks, days, label, tone, sortKey: totalDays };
+}
+
 // Which trip the dashboard opens on: the trip currently in progress, so the
 // first thing seen is live work rather than combined history. Pinned to status
 // rather than a hard-coded id, so opening Trip 3 later follows automatically.
