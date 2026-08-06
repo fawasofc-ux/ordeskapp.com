@@ -120,6 +120,28 @@ checkEq('Future date is amber', since('2026-08-04').tone, 'amb');
 const ages = ['2026-05-13', '2026-07-25', '2026-08-01'].map((d) => since(d).sortKey);
 checkEq('Sort key ascends with recency', JSON.stringify([...ages].sort((a, b) => a - b)), JSON.stringify([0, 7, 80]));
 
+console.log('— Since Sold stops when the money arrives —');
+const age = (sale) => E.saleAge(sale, NOW);
+// Pending keeps counting against today and escalates.
+checkEq('Pending keeps counting', age({ date: '2026-05-13', status: 'Pending' }).label, '2m 2w 5d');
+checkEq('Pending stays red when old', age({ date: '2026-05-13', status: 'Pending' }).tone, 'neg');
+// Received stops on the day the money came in, and reads green however long it took.
+const settled = age({ date: '2026-05-13', status: 'Received', receivedDate: '2026-06-01' });
+checkEq('Received stops at the received date', settled.label, '2w 5d');
+checkEq('Received is green even after months', age({ date: '2026-01-01', status: 'Received', receivedDate: '2026-06-01' }).tone, 'pos');
+checkEq('Received is marked settled', settled.settled, true);
+checkEq('Settled age ignores today', age({ date: '2026-05-13', status: 'Received', receivedDate: '2026-06-01' }).totalDays, 19);
+// Received with no received date must not invent a duration.
+checkEq('Received without a date shows a dash', age({ date: '2026-05-13', status: 'Received' }).label, '—');
+checkEq('Received without a date has no colour', age({ date: '2026-05-13', status: 'Received' }).tone, '');
+checkEq('Received without a date is still settled', age({ date: '2026-05-13', status: 'Received' }).settled, true);
+// Returned sales have nothing outstanding.
+checkEq('Returned shows a dash', age({ date: '2026-05-13', status: 'Pending', returned: true }).label, '—');
+// Paid-before-sold is bad data and must stay visible, not be painted green.
+const backwards = age({ date: '2026-06-01', status: 'Received', receivedDate: '2026-05-13' });
+checkEq('Received before sold is flagged amber', backwards.tone, 'amb');
+checkEq('Received before sold is not green', backwards.tone === 'pos', false);
+
 console.log('— Default trip on load —');
 checkEq('Opens on the in-progress trip', E.defaultTripFilter(d.trips), 'trip2');
 checkEq('Follows a newly opened trip', E.defaultTripFilter([...d.trips, { id: 'trip3', name: 'Trip 3', status: 'Open' }]), 'trip3');

@@ -391,6 +391,33 @@ export function sinceSold(dateStr, now = new Date()) {
   return { valid: true, totalDays, months, weeks, days, label, tone, sortKey: totalDays };
 }
 
+const NO_AGE = { valid: false, label: '—', tone: '', sortKey: -1 };
+
+// Age of a sale, which is really "how long has this money been outstanding".
+//
+// A Pending sale keeps counting against today and escalates in colour. A
+// Received sale stops on the day the money arrived and reads green — it is
+// settled, so it should not keep ageing. Received rows with no recorded
+// received date show a dash rather than a fabricated duration, and returned
+// rows show one too because nothing is outstanding on them.
+export function saleAge(sale, now = new Date()) {
+  if (!sale) return NO_AGE;
+  if (sale.returned) return { ...NO_AGE, settled: true };
+
+  if (sale.status === 'Received') {
+    const paid = parseYMD(sale.receivedDate);
+    if (!paid) return { ...NO_AGE, settled: true };
+    const r = sinceSold(sale.date, paid);
+    if (!r.valid) return { ...NO_AGE, settled: true };
+    // Paid before it was sold is bad data — keep it visible rather than
+    // painting it green like a healthy settled sale.
+    if (r.future) return { ...r, settled: true };
+    return { ...r, tone: 'pos', settled: true, receivedDate: sale.receivedDate };
+  }
+
+  return sinceSold(sale.date, now);
+}
+
 // Which trip the dashboard opens on: the trip currently in progress, so the
 // first thing seen is live work rather than combined history. Pinned to status
 // rather than a hard-coded id, so opening Trip 3 later follows automatically.

@@ -47,10 +47,12 @@ create table if not exists public.gem_sales (
   returned       boolean not null default false,
   return_date    text,
   lot_id         text,
+  received_date  text,
   updated_at     timestamptz not null default now()
 );
 
 alter table public.gem_sales add column if not exists lot_id text;
+alter table public.gem_sales add column if not exists received_date text;
 
 -- Unit price is deliberately NOT a column: it is amount / pieces, derived in
 -- the app so it can never drift out of step with the figures it comes from.

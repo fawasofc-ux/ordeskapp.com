@@ -27,6 +27,7 @@ export const COLLECTIONS = {
       amount: num(r.amount) ?? 0,
       returned: !!r.returned,
       return_date: r.returnDate || null,
+      received_date: r.receivedDate || null,
       lot_id: r.lotId || null,
     }),
     fromDb: (r) => ({
@@ -42,6 +43,7 @@ export const COLLECTIONS = {
       amount: Number(r.amount) || 0,
       ...(r.returned ? { returned: true } : {}),
       ...(r.return_date ? { returnDate: r.return_date } : {}),
+      receivedDate: r.received_date || '',
       lotId: r.lot_id || undefined,
     }),
   },

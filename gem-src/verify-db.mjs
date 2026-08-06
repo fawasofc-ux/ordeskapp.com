@@ -71,6 +71,8 @@ check('commissionPct survives', withFlags.commissionPct, 7.5);
 check('qty survives', withFlags.qty, 3);
 check('returned survives', withFlags.returned, true);
 check('returnDate survives', withFlags.returnDate, '2026-07-01');
+check('receivedDate round-trips', COLLECTIONS.sales.fromDb(COLLECTIONS.sales.toDb({ id: 's', amount: 1, receivedDate: '2026-06-01' })).receivedDate, '2026-06-01');
+check('absent receivedDate stays empty', COLLECTIONS.sales.fromDb(COLLECTIONS.sales.toDb({ id: 's', amount: 1 })).receivedDate, '');
 check('returned sale still nets zero', E.saleNet(withFlags), 0);
 
 console.log(failures === 0 ? '\nDB MAPPING VERIFIED — no data lost ✔' : `\n${failures} CHECK(S) FAILED ✘`);

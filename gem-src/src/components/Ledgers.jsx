@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal.jsx';
 import { addRow, updateRow, deleteRow, addCategory, addPartner } from '../store.js';
 import { fmt } from '../format.js';
-import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice, lotOptions, sinceSold } from '../engine.js';
+import { saleNet, nextGemCode, nextLotId, purchaseUnitPrice, lotOptions, saleAge } from '../engine.js';
 import { buildColumns, totalColumns, firstTotalIndex } from '../columns.js';
 
 // Ledgers that carry a gem lot, and so offer the lot filter.
@@ -30,6 +30,7 @@ function schemas(data) {
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
         { key: 'lotId', label: 'Gem Lot ID', type: 'select', options: lotOptsOptional, optional: true, hint: 'which lot the piece came out of — its unit price leaves stock' },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'Received', label: 'Received' }, { value: 'Pending', label: 'Pending' }] },
+        { key: 'receivedDate', label: 'Received Date', type: 'date', hint: 'when the money arrived — stops the Since Sold counter' },
         { key: 'commissionPct', label: 'Commission %', type: 'number', noTotal: true, hint: '% deducted from the sale (0 for already-net entries)' },
         { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — deducted from the lot above' },
         { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'gross sale before commission' },
@@ -43,10 +44,19 @@ function schemas(data) {
           label: 'Since Sold',
           after: 'date',
           noTotal: true,
-          compute: (r) => sinceSold(r.date).sortKey,
+          compute: (r) => saleAge(r).sortKey,
           render: (r) => {
-            const s = sinceSold(r.date);
-            return <span className={s.tone} title={s.valid && !s.future ? `${s.totalDays} days` : undefined}>{s.label}</span>;
+            const s = saleAge(r);
+            const title = !s.valid
+              ? r.returned
+                ? 'Returned — nothing outstanding'
+                : r.status === 'Received'
+                  ? 'Received, but no received date recorded'
+                  : 'No sale date recorded'
+              : s.settled
+                ? `Settled in ${s.totalDays} days${s.receivedDate ? ` — received ${s.receivedDate}` : ''}`
+                : `${s.totalDays} days outstanding`;
+            return <span className={s.tone} title={title}>{s.label}</span>;
           },
         },
         { key: 'net', label: 'Net (LKR)', accent: 'pos', compute: saleNet },
@@ -125,7 +135,17 @@ function RowForm({ schema, initial, onSave, onCancel }) {
   });
   const [newOption, setNewOption] = useState({});
 
-  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  const set = (key, value) =>
+    setForm((f) => {
+      const next = { ...f, [key]: value };
+      // Marking a sale Received stamps today's date if none is recorded, so the
+      // Since Sold counter has a day to stop on. An existing date is kept, and
+      // switching back to Pending leaves it alone rather than discarding it.
+      if (key === 'status' && value === 'Received' && 'receivedDate' in f && !f.receivedDate) {
+        next.receivedDate = new Date().toISOString().slice(0, 10);
+      }
+      return next;
+    });
 
   function submit(e) {
     e.preventDefault();

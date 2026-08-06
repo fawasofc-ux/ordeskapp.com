@@ -36,6 +36,7 @@ const sales = {
     { key: 'tripId', type: 'select' },
     { key: 'lotId', type: 'select', optional: true },
     { key: 'status', type: 'select' },
+    { key: 'receivedDate', type: 'date' },
     { key: 'commissionPct', type: 'number', noTotal: true },
     { key: 'qty', type: 'number' },
     { key: 'amount', type: 'number' },
@@ -57,7 +58,7 @@ const sCols = buildColumns(sales).map((c) => c.key);
 checkEq(
   'Sales: since-sold after Date, lot id after Trip, net appended last',
   sCols.join(','),
-  'date,sinceSold,gemCode,description,customer,tripId,lotId,status,commissionPct,qty,amount,net',
+  'date,sinceSold,gemCode,description,customer,tripId,lotId,status,receivedDate,commissionPct,qty,amount,net',
 );
 checkEq('Sales: since-sold is never summed', totalColumns(buildColumns(sales)).some((c) => c.key === 'sinceSold'), false);
 
