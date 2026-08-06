@@ -12,9 +12,13 @@ permissions:
   pages: write
   id-token: write
 
+# One deployment at a time, but never cancel one that is already running:
+# killing a Pages deploy mid-flight errors its deployment and can leave the
+# environment stuck with the next run waiting indefinitely. Queued runs are
+# superseded instead, which is GitHub's documented setting for Pages.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
