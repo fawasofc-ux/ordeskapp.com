@@ -391,7 +391,7 @@ export default function Ledgers({ data, tripFilter }) {
           <thead>
             <tr>
               {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number' || (!!f.compute && !f.render)))}
-              <th style={{ width: 110 }}></th>
+              <th className="actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -429,7 +429,7 @@ export default function Ledgers({ data, tripFilter }) {
                   }
                   return <td key={f.key} className={numeric ? 'num' : ''}>{content}</td>;
                 })}
-                <td>
+                <td className="actions-col">
                   <div className="row-actions">
                     {tab === 'sales' && (
                       <button
@@ -457,7 +457,7 @@ export default function Ledgers({ data, tripFilter }) {
                     {totalCols.includes(c) ? fmt(colTotal(c)) : ''}
                   </td>
                 ))}
-                <td></td>
+                <td className="actions-col"></td>
               </tr>
             )}
           </tbody>

@@ -304,7 +304,26 @@ tr.returned:hover td { opacity: 0.75; }
 tr.returned td:nth-child(-n + 3) { text-decoration: line-through; }
 tr.returned .badge, tr.returned .row-actions { text-decoration: none; }
 
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; opacity: 0; transition: opacity 0.15s ease; }
+/* Row actions column.
+   width:1% + nowrap sizes it to its buttons instead of a fixed guess — the
+   sales row carries three (Return, Edit, Del) and was being clipped by the
+   old 110px. Pinned to the right edge because the sales table is now wide
+   enough to scroll horizontally, which would otherwise park the buttons
+   off-screen. Needs an opaque background so rows do not show through. */
+.actions-col {
+  position: sticky;
+  right: 0;
+  width: 1%;
+  white-space: nowrap;
+  background: #12151b;
+  box-shadow: -10px 0 12px -8px rgba(0, 0, 0, 0.65);
+}
+thead .actions-col { z-index: 3; }
+tbody .actions-col { z-index: 2; }
+tbody tr:hover .actions-col { background: #171b23; }
+tr.total-row .actions-col { background: #12151b; }
+
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; white-space: nowrap; opacity: 0; transition: opacity 0.15s ease; }
 tr:hover .row-actions { opacity: 1; }
 
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
