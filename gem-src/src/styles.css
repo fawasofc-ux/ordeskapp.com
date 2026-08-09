@@ -41,7 +41,9 @@ body::before {
 
 #root { position: relative; z-index: 1; }
 
-.app { max-width: 1280px; margin: 0 auto; padding: 20px 24px 80px; }
+/* Wider canvas and slimmer side gutters: the sales ledger runs to 13 columns
+   and needs the horizontal room more than the page needs whitespace. */
+.app { max-width: 1600px; margin: 0 auto; padding: 20px 14px 80px; }
 
 /* ---------- header ---------- */
 .header {
@@ -304,8 +306,25 @@ tr.returned:hover td { opacity: 0.75; }
 tr.returned td:nth-child(-n + 3) { text-decoration: line-through; }
 tr.returned .badge, tr.returned .row-actions { text-decoration: none; }
 
-.row-actions { display: flex; gap: 6px; justify-content: flex-end; opacity: 0; transition: opacity 0.15s ease; }
+/* Actions column sizes to its buttons instead of a fixed guess, so nothing is
+   clipped whether a ledger shows two of them or three. Deliberately NOT
+   sticky — pinning it fought the row backgrounds and looked wrong. */
+.actions-col { width: 1%; white-space: nowrap; }
+
+/* Percentages never exceed 100%, so this column needs almost no width. */
+.narrow-col { width: 1%; }
+
+.row-actions { display: flex; gap: 5px; justify-content: flex-end; white-space: nowrap; opacity: 0; transition: opacity 0.15s ease; }
 tr:hover .row-actions { opacity: 1; }
+
+/* Square icon buttons: the labelled versions needed ~181px of table width. */
+.btn.icon-btn {
+  padding: 3px 0;
+  width: 26px;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+}
 
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .spacer { flex: 1; }

@@ -30,8 +30,10 @@ function schemas(data) {
         { key: 'tripId', label: 'Trip', type: 'select', options: tripOpts },
         { key: 'lotId', label: 'Gem Lot ID', type: 'select', options: lotOptsOptional, optional: true, hint: 'which lot the piece came out of — its unit price leaves stock' },
         { key: 'status', label: 'Status', type: 'select', options: [{ value: 'Received', label: 'Received' }, { value: 'Pending', label: 'Pending' }] },
-        { key: 'receivedDate', label: 'Received Date', type: 'date', hint: 'when the money arrived — stops the Since Sold counter' },
-        { key: 'commissionPct', label: 'Commission %', type: 'number', noTotal: true, hint: '% deducted from the sale (0 for already-net entries)' },
+        // `short` keeps the table header narrow while the form still spells the
+        // field out in full — the table is 13 columns and needs the room.
+        { key: 'receivedDate', label: 'Received Date', short: 'Rcd Dt.', type: 'date', hint: 'when the money arrived — stops the Since Sold counter' },
+        { key: 'commissionPct', label: 'Commission %', short: 'Com %', type: 'number', noTotal: true, narrow: true, hint: '% deducted from the sale (0 for already-net entries)' },
         { key: 'qty', label: 'Qty', type: 'number', hint: 'pieces sold — deducted from the lot above' },
         { key: 'amount', label: 'Amount (LKR)', type: 'number', hint: 'gross sale before commission' },
       ],
@@ -337,10 +339,11 @@ export default function Ledgers({ data, tripFilter }) {
     }
   }
 
-  function headerCell(key, label, numeric = false) {
+  function headerCell(key, label, numeric = false, narrow = false) {
     const active = sort.key === key;
+    const cls = [numeric ? 'num' : '', narrow ? 'narrow-col' : ''].filter(Boolean).join(' ');
     return (
-      <th className={numeric ? 'num' : ''} onClick={() => setSort({ key, dir: active ? -sort.dir : 1 })}>
+      <th className={cls} onClick={() => setSort({ key, dir: active ? -sort.dir : 1 })}>
         {label} {active ? (sort.dir === 1 ? '▲' : '▼') : ''}
       </th>
     );
@@ -390,8 +393,8 @@ export default function Ledgers({ data, tripFilter }) {
         <table>
           <thead>
             <tr>
-              {cols.map((f) => headerCell(f.key, f.label.replace(' (LKR)', ''), f.type === 'number' || (!!f.compute && !f.render)))}
-              <th style={{ width: 110 }}></th>
+              {cols.map((f) => headerCell(f.key, (f.short || f.label).replace(' (LKR)', ''), f.type === 'number' || (!!f.compute && !f.render), f.narrow))}
+              <th className="actions-col"></th>
             </tr>
           </thead>
           <tbody>
@@ -429,19 +432,22 @@ export default function Ledgers({ data, tripFilter }) {
                   }
                   return <td key={f.key} className={numeric ? 'num' : ''}>{content}</td>;
                 })}
-                <td>
+                {/* Icons rather than words: three labelled buttons needed ~181px
+                    on a table already too wide. Each keeps a tooltip. */}
+                <td className="actions-col">
                   <div className="row-actions">
                     {tab === 'sales' && (
                       <button
-                        className={`btn icon ${r.returned ? '' : 'ghost'}`}
+                        className={`btn icon-btn ${r.returned ? '' : 'ghost'}`}
                         onClick={() => onToggleReturn(r)}
                         title={r.returned ? 'Undo this return' : 'Gem returned — reverse the sale and put the piece back in stock'}
+                        aria-label={r.returned ? 'Undo return' : 'Return'}
                       >
-                        {r.returned ? 'Undo' : '↩ Return'}
+                        {r.returned ? '↺' : '↩'}
                       </button>
                     )}
-                    <button className="btn ghost icon" onClick={() => setEditing({ row: r })}>Edit</button>
-                    <button className="btn danger icon" onClick={() => onDelete(r)}>Del</button>
+                    <button className="btn ghost icon-btn" onClick={() => setEditing({ row: r })} title="Edit" aria-label="Edit">✎</button>
+                    <button className="btn danger icon-btn" onClick={() => onDelete(r)} title="Delete" aria-label="Delete">✕</button>
                   </div>
                 </td>
               </tr>
@@ -457,7 +463,7 @@ export default function Ledgers({ data, tripFilter }) {
                     {totalCols.includes(c) ? fmt(colTotal(c)) : ''}
                   </td>
                 ))}
-                <td></td>
+                <td className="actions-col"></td>
               </tr>
             )}
           </tbody>
