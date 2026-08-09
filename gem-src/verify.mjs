@@ -142,6 +142,24 @@ const backwards = age({ date: '2026-06-01', status: 'Received', receivedDate: '2
 checkEq('Received before sold is flagged amber', backwards.tone, 'amb');
 checkEq('Received before sold is not green', backwards.tone === 'pos', false);
 
+console.log('— Gem vs non-gem sales split —');
+// The Sales tab defaults to gem-only by filtering on lotId. The two halves
+// must still add back to the trip's real gross, or a filtered TOTAL would be
+// quietly wrong.
+const trip2Sales = d.sales.filter((s) => s.tripId === 'trip2');
+const gemRows = trip2Sales.filter((s) => s.lotId);
+const otherRows = trip2Sales.filter((s) => !s.lotId);
+const sumAmt = (rows) => rows.reduce((t, s) => t + (Number(s.amount) || 0), 0);
+checkEq('Exactly one non-gem sale in the trip', otherRows.length, 1);
+checkEq('and it is the sarong sale', /sarong/i.test(otherRows[0].description), true);
+checkEq('non-gem row carries no gem code either', otherRows[0].gemCode, undefined);
+check('Gem-only gross excludes the sarong', sumAmt(gemRows), 865025 - 311025);
+check('Non-gem gross is the sarong alone', sumAmt(otherRows), 311025);
+check('Both halves add back to the full trip gross', sumAmt(gemRows) + sumAmt(otherRows), 865025);
+// Splitting the view must not touch the books.
+check('Trip gross is unchanged by the split', E.pnl(d, 'trip2').grossSales, 865025);
+check('Sarong still moves no stock', sumAmt(otherRows.filter((s) => Number(s.qty) > 0)), 0);
+
 console.log('— Default trip on load —');
 checkEq('Opens on the in-progress trip', E.defaultTripFilter(d.trips), 'trip2');
 checkEq('Follows a newly opened trip', E.defaultTripFilter([...d.trips, { id: 'trip3', name: 'Trip 3', status: 'Open' }]), 'trip3');

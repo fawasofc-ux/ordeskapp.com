@@ -8,6 +8,14 @@ import { buildColumns, totalColumns, firstTotalIndex } from '../columns.js';
 // Ledgers that carry a gem lot, and so offer the lot filter.
 const LOT_TABS = new Set(['sales', 'purchases', 'expenses']);
 
+// Sales opens on gems only: the business is gemstones, and the occasional
+// non-gem row (the once-a-trip sarong sale) otherwise sits in the middle of
+// the gem figures. Every other ledger opens unfiltered — defaulting expenses
+// to gems only would hide travel and other costs that carry no lot.
+const GEMS_ONLY = '__gems';
+const NO_LOT = '__none';
+const defaultLotFilter = (tab) => (tab === 'sales' ? GEMS_ONLY : '');
+
 // Schema-driven ledgers: one table + one form implementation for all five.
 function schemas(data) {
   const tripOpts = data.trips.map((t) => ({ value: t.id, label: t.name }));
@@ -252,7 +260,7 @@ export default function Ledgers({ data, tripFilter }) {
   const [editing, setEditing] = useState(null); // { row } or { row: null } for add
   const [sort, setSort] = useState({ key: 'date', dir: -1 });
   const [statusFilter, setStatusFilter] = useState('');
-  const [lotFilter, setLotFilter] = useState('');
+  const [lotFilter, setLotFilter] = useState(() => defaultLotFilter('sales'));
   const [search, setSearch] = useState('');
 
   // "Since Sold" is measured against today, so a tab left open overnight would
@@ -275,6 +283,18 @@ export default function Ledgers({ data, tripFilter }) {
   );
   const tripName = (id) => data.trips.find((t) => t.id === id)?.name || '—';
 
+  // What the gems-only default is leaving out, within the current trip.
+  const hiddenNonGem = useMemo(() => {
+    if (!LOT_TABS.has(tab)) return { count: 0, amount: 0 };
+    const scoped = data[tab].filter(
+      (r) => (!tripFilter || r.tripId === tripFilter) && !r.lotId,
+    );
+    return {
+      count: scoped.length,
+      amount: scoped.reduce((t, r) => t + (Number(r.amount) || 0), 0),
+    };
+  }, [data, tab, tripFilter]);
+
   const rows = useMemo(() => {
     let out = [...data[tab]];
     if (tab !== 'capital' && tab !== 'trips' && tripFilter) out = out.filter((r) => r.tripId === tripFilter);
@@ -285,9 +305,9 @@ export default function Ledgers({ data, tripFilter }) {
     }
     // Lot filter — the point of the lot ids: see one lot's whole story.
     if (LOT_TABS.has(tab) && lotFilter) {
-      out = lotFilter === '__none'
-        ? out.filter((r) => !r.lotId)
-        : out.filter((r) => r.lotId === lotFilter);
+      if (lotFilter === GEMS_ONLY) out = out.filter((r) => r.lotId);
+      else if (lotFilter === NO_LOT) out = out.filter((r) => !r.lotId);
+      else out = out.filter((r) => r.lotId === lotFilter);
     }
     if (search) {
       const q = search.toLowerCase();
@@ -358,7 +378,7 @@ export default function Ledgers({ data, tripFilter }) {
     <div className="panel span12">
       <div className="tabs">
         {Object.entries(allSchemas).map(([key, s]) => (
-          <button key={key} className={`tab${tab === key ? ' active' : ''}`} onClick={() => { setTab(key); setSort({ key: 'date', dir: -1 }); }}>
+          <button key={key} className={`tab${tab === key ? ' active' : ''}`} onClick={() => { setTab(key); setSort({ key: 'date', dir: -1 }); setLotFilter(defaultLotFilter(key)); }}>
             {s.label}
             <span style={{ opacity: 0.5, marginLeft: 6 }}>{data[key].length}</span>
           </button>
@@ -377,12 +397,21 @@ export default function Ledgers({ data, tripFilter }) {
         )}
         {LOT_TABS.has(tab) && (
           <select value={lotFilter} onChange={(e) => setLotFilter(e.target.value)} title="Filter by gem lot">
-            <option value="">All gem lots</option>
+            <option value={GEMS_ONLY}>{tab === 'sales' ? 'All gem sales' : 'All gem lots'}</option>
             {lotFilterOptions.map((l) => (
               <option key={l.lotId} value={l.lotId}>{l.lotId}</option>
             ))}
-            <option value="__none">— no lot —</option>
+            <option value={NO_LOT}>{tab === 'sales' ? 'Other sales (no lot)' : 'No gem lot'}</option>
+            <option value="">{tab === 'sales' ? 'All sales (gem + other)' : 'Everything'}</option>
           </select>
+        )}
+        {/* Say what is being left out, so a filtered TOTAL is never mistaken
+            for the whole ledger. */}
+        {LOT_TABS.has(tab) && lotFilter === GEMS_ONLY && hiddenNonGem.count > 0 && (
+          <span className="subtle" title="Switch the filter to see these">
+            {hiddenNonGem.count} non-gem row{hiddenNonGem.count > 1 ? 's' : ''} hidden
+            {hiddenNonGem.amount ? ` (${fmt(hiddenNonGem.amount)})` : ''}
+          </span>
         )}
         <input placeholder="Search…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ maxWidth: 200 }} />
         <div className="spacer" />
