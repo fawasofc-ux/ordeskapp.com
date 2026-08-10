@@ -9,7 +9,16 @@
 import * as db from './db.js';
 import { assignMissingLotIds, assignMissingSaleLots } from './engine.js';
 
-const CACHE_KEY = 'gem-dashboard-cache-v2';
+// The offline cache is keyed per account. A single shared key meant a second
+// business signing in on the same browser could be shown the first one's books
+// whenever the database read failed — the cache had no idea whose data it held.
+const CACHE_PREFIX = 'gem-dashboard-cache-v2';
+const cacheKey = () => (ownerId ? `${CACHE_PREFIX}:${ownerId}` : null);
+
+// Legacy (pre-database) books live under this key. Once an account has claimed
+// them they are never offered again, so a second business is not invited to
+// import the first one's ledger.
+const LEGACY_OWNER_KEY = 'gem-legacy-owner';
 
 // Fallback only, for a brand-new empty database. Deliberately carries no real
 // partner names: this ships in a public bundle, and the actual partners and
@@ -56,17 +65,23 @@ export function getState() {
 }
 
 function emit() {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(state));
-  } catch {
-    /* cache is best-effort */
+  const key = cacheKey();
+  if (key) {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+      /* cache is best-effort */
+    }
   }
   listeners.forEach((fn) => fn());
 }
 
+// Only ever returns the signed-in account's own cache.
 function readCache() {
+  const key = cacheKey();
+  if (!key) return null;
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -78,6 +93,9 @@ function readCache() {
 export async function initStore(userId) {
   ownerId = userId;
   setStatus('loading');
+  // Drop the old un-keyed cache from before caches were per-account, so no
+  // ownerless copy of anyone's books is left lying in the browser.
+  try { localStorage.removeItem(CACHE_PREFIX); } catch { /* ignore */ }
   try {
     const loaded = await db.loadAll();
     state = { ...loaded, settings: loaded.settings || DEFAULT_SETTINGS };
@@ -86,7 +104,11 @@ export async function initStore(userId) {
     startRealtime();
     await backfillLotIds();
     await backfillSaleLots();
-    return { empty: db.isEmpty(loaded) };
+    const empty = db.isEmpty(loaded);
+    // An account that already holds books has clearly done its import, so it
+    // claims the legacy copy — a later account will not be offered it.
+    if (!empty) claimLegacyData();
+    return { empty };
   } catch (e) {
     // No connection: fall back to the cached copy so the dashboard still works.
     const cached = readCache();
@@ -166,6 +188,12 @@ export async function reloadFromDb() {
 export function teardown() {
   if (unsubscribeRealtime) unsubscribeRealtime();
   unsubscribeRealtime = null;
+  // Signing out should leave no copy of that account's books behind, so the
+  // next account on this browser cannot be shown them.
+  const key = cacheKey();
+  if (key) {
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+  }
   state = null;
   ownerId = null;
 }
@@ -234,9 +262,32 @@ export function addPartner(name, sharePct = 0) {
 
 const LEGACY_KEYS = ['gem-dashboard-v1'];
 
+// Records which account the legacy books belong to. The raw data is left in
+// place as a backup; it simply stops being offered to anyone else.
+function claimLegacyData() {
+  if (!ownerId) return;
+  try {
+    if (!localStorage.getItem(LEGACY_OWNER_KEY)) {
+      localStorage.setItem(LEGACY_OWNER_KEY, ownerId);
+    }
+  } catch {
+    /* best effort */
+  }
+}
+
 // The old app stored plaintext state under gem-dashboard-v1 on this same
-// origin, so the staging build can read the real books directly.
+// origin, so the first account can import the real books directly. Offered
+// only to the account that already owns them — a second business signing in
+// on this browser must never be invited to import the first one's ledger.
 export function findLegacyData() {
+  let claimedBy = null;
+  try {
+    claimedBy = localStorage.getItem(LEGACY_OWNER_KEY);
+  } catch {
+    /* ignore */
+  }
+  if (claimedBy && claimedBy !== ownerId) return null;
+
   for (const key of LEGACY_KEYS) {
     try {
       const raw = localStorage.getItem(key);
@@ -262,6 +313,7 @@ export async function runMigration(legacyState, onProgress) {
     ...(withSaleLots ? { sales: withSaleLots.sales } : {}),
   };
   const counts = await db.migrateLocalState(prepared, ownerId, onProgress);
+  claimLegacyData(); // imported once; never offered to another account
   await reloadFromDb();
   return counts;
 }
