@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:test": "BUILD_TARGET=test vite build",
     "preview": "vite preview",
-    "verify": "node verify.mjs"
+    "verify": "node verify.mjs",
+    "verify:export": "node verify-export.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",

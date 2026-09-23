@@ -26,6 +26,11 @@ export default defineConfig({
     react(),
     {
       name: 'clean-outdir-preserving-staging',
+      // Build only. Vite fires buildStart for the DEV SERVER too, where
+      // BUILD_TARGET is unset — so without this guard `npm run dev` cleaned
+      // the production folder and deleted the deployed /gem bundle from the
+      // working tree. Committing after that would have blanked the live site.
+      apply: 'build',
       buildStart() {
         const dir = resolve(__dirname, OUT);
         if (!existsSync(dir)) return;
@@ -37,6 +42,7 @@ export default defineConfig({
     },
     {
       name: 'emit-version-json',
+      apply: 'build',
       closeBundle() {
         writeFileSync(
           resolve(__dirname, OUT, 'version.json'),

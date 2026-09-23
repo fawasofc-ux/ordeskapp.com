@@ -11,6 +11,7 @@ import KpiCard from './components/KpiCard.jsx';
 import PartnerTable from './components/PartnerTable.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import Ledgers from './components/Ledgers.jsx';
+import ExportPanel from './components/Export.jsx';
 import { PnlChart, ExpenseDonut, ReceivablesBar, CashFlowChart } from './components/Charts.jsx';
 
 // Poll the deployed version.json; when a newer build goes live, reload once
@@ -407,6 +408,10 @@ export default function App() {
       </section>
 
       <Ledgers data={data} tripFilter={tripFilter} />
+
+      <section className="grid">
+        <ExportPanel data={data} tripFilter={tripFilter} />
+      </section>
 
       <div className="footer-note">
         Live Supabase database (Postgres) · signed in as {user.email} · changes save instantly and sync
